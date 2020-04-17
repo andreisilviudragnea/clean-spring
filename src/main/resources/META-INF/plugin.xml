@@ -1,0 +1,46 @@
+<idea-plugin>
+    <id>io.dragnea.cleanspring</id>
+    <name>Clean Spring</name>
+    <version>0.1</version>
+    <vendor email="andreisilviudragnea@gmail.com" url="https://github.com/andreisilviudragnea/clean-spring">Andrei
+        Silviu Dragnea
+    </vendor>
+
+    <depends>com.intellij.modules.java</depends>
+    <depends>org.jetbrains.kotlin</depends>
+    <depends>com.intellij.spring</depends>
+
+    <description><![CDATA[
+      Plugin which cleans up Spring-based code.
+    ]]></description>
+
+    <change-notes><![CDATA[
+      Initial release of this plugin. More to come.
+    ]]>
+    </change-notes>
+
+    <!-- please see http://www.jetbrains.org/intellij/sdk/docs/basics/getting_started/build_number_ranges.html for description -->
+    <idea-version since-build="192.0"/>
+
+    <!-- please see http://www.jetbrains.org/intellij/sdk/docs/basics/getting_started/plugin_compatibility.html
+         on how to target different products -->
+    <!-- uncomment to enable plugin in all products
+    <depends>com.intellij.modules.lang</depends>
+    -->
+
+    <extensions defaultExtensionNs="com.intellij">
+        <localInspection implementationClass="io.dragnea.cleanspring.InjectSetterPropertyThroughConstructorInspection"
+                         displayName="Inject setter property through constructor"
+                         groupPath="Spring,Spring Core"
+                         groupName="Code"
+                         enabledByDefault="true"
+                         level="WARNING"
+                         language="JAVA"
+        />
+    </extensions>
+
+    <actions>
+        <!-- Add your actions here -->
+    </actions>
+
+</idea-plugin>
