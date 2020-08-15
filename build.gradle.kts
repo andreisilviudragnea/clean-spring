@@ -1,7 +1,7 @@
 plugins {
     id("org.jetbrains.intellij") version "0.4.21"
     java
-    kotlin("jvm") version "1.3.72"
+    kotlin("jvm") version "1.4.0"
 }
 
 group = "io.dragnea"
@@ -13,22 +13,22 @@ intellij {
     setPlugins(
             "java",
             "Spring",
-            "org.jetbrains.kotlin:1.3.72-release-IJ2020.1-3"
+            "org.jetbrains.kotlin:1.4.0-release-IJ2020.2-1"
     )
 
     updateSinceUntilBuild = false
 }
 
-configure<JavaPluginConvention> {
-    sourceCompatibility = JavaVersion.VERSION_1_8
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
 }
 
 tasks {
     compileKotlin {
-        kotlinOptions.jvmTarget = "1.8"
+        kotlinOptions.jvmTarget = "11"
     }
     compileTestKotlin {
-        kotlinOptions.jvmTarget = "1.8"
+        kotlinOptions.jvmTarget = "11"
     }
     runIde {
         maxHeapSize = "4G"

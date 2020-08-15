@@ -39,6 +39,28 @@
         />
     </extensions>
 
+    <extensions defaultExtensionNs="com.intellij">
+        <localInspection implementationClass="io.dragnea.cleanspring.UnnecessaryBeanMethodInspection"
+                         displayName="Unnecessary bean method"
+                         groupPath="Spring,Spring Core"
+                         groupName="Code"
+                         enabledByDefault="true"
+                         level="WARNING"
+                         language="JAVA"
+        />
+    </extensions>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <localInspection implementationClass="io.dragnea.cleanspring.PossiblyUnnecessaryBeanMethodInspection"
+                         displayName="Possibly unnecessary bean method"
+                         groupPath="Spring,Spring Core"
+                         groupName="Code"
+                         enabledByDefault="true"
+                         level="WARNING"
+                         language="JAVA"
+        />
+    </extensions>
+
     <actions>
         <!-- Add your actions here -->
     </actions>
