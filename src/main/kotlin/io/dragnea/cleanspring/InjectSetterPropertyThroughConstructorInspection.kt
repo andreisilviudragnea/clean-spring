@@ -8,9 +8,9 @@ import com.intellij.codeInspection.ProblemsHolder
 import com.intellij.openapi.project.Project
 import com.intellij.psi.JavaElementVisitor
 import com.intellij.psi.PsiAssignmentExpression
+import com.intellij.psi.PsiBlockStatement
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiCodeBlock
-import com.intellij.psi.PsiDeclarationStatement
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiElementFactory
 import com.intellij.psi.PsiElementVisitor
@@ -50,10 +50,10 @@ class InjectSetterPropertyThroughConstructorInspection : AbstractBaseJavaLocalIn
                 if (!method.isCandidate()) return
 
                 holder.registerProblem(
-                        method.nameIdentifier!!,
-                        "Property can be injected through constructor",
-                        ProblemHighlightType.WARNING,
-                        Fix()
+                    method.nameIdentifier!!,
+                    "Property can be injected through constructor",
+                    ProblemHighlightType.WARNING,
+                    Fix()
                 )
             }
         }
@@ -79,12 +79,12 @@ class InjectSetterPropertyThroughConstructorInspection : AbstractBaseJavaLocalIn
                 query.processConstructorUsages(fieldIsSetterOf)
 
                 ReferencesSearch
-                        .search(setterMethod)
-                        .forEach {
-                            when (it) {
-                                is PropertyReference -> it.processXmlPropertyReference()
-                            }
+                    .search(setterMethod)
+                    .forEach {
+                        when (it) {
+                            is PropertyReference -> it.processXmlPropertyReference()
                         }
+                    }
 
                 setterMethod.delete()
             }
@@ -95,7 +95,7 @@ class InjectSetterPropertyThroughConstructorInspection : AbstractBaseJavaLocalIn
 }
 
 private fun PsiMethod.isCandidate(): Boolean {
-    if (hasAnnotation("org.springframework.beans.factory.annotation.Autowired")) {
+    if (hasAnnotation("org.springframework.beans.factory.annotation.Autowired") && allUsagesAreRightAfterConstructorCall()) {
         return true
     }
 
@@ -104,6 +104,29 @@ private fun PsiMethod.isCandidate(): Boolean {
     }
 
     return false
+}
+
+private fun PsiMethod.allUsagesAreRightAfterConstructorCall(): Boolean {
+    return ReferencesSearch.search(this).map {
+        val referenceExpression = it.element.castSafelyTo<PsiReferenceExpression>() ?: return@map false
+
+        val qualifierExpression =
+            referenceExpression.qualifierExpression.castSafelyTo<PsiReferenceExpression>() ?: return@map false
+
+        val psiVariable = qualifierExpression.resolve().castSafelyTo<PsiVariable>() ?: return@map false
+
+        val statements = ReferencesSearch.search(psiVariable).mapNotNull {
+            it.element.parentOfType<PsiStatement>()
+        }
+
+        val block = psiVariable.parentOfType<PsiCodeBlock>() ?: return@map false
+
+        val setterStatement = referenceExpression.parentOfType<PsiStatement>() ?: return@map false
+
+        val firstReferencedStatement = block.statements.firstOrNull { it in statements } ?: return@map false
+
+        firstReferencedStatement == setterStatement
+    }.all { it }
 }
 
 private fun PsiClass.processImplicitSuperCall(field: PsiField) {
@@ -132,10 +155,10 @@ private fun PsiMethod.processImplicitSuperCall(field: PsiField) {
     addParameter(field)
 
     val superCall = body!!
-            .statements[0]
-            .cast<PsiExpressionStatement>()
-            .expression
-            .cast<PsiMethodCallExpression>()
+        .statements[0]
+        .cast<PsiExpressionStatement>()
+        .expression
+        .cast<PsiMethodCallExpression>()
 
     superCall.argumentList.add(field.factory.createExpressionFromText(field.name, this))
 }
@@ -163,7 +186,9 @@ private fun PsiJavaCodeReferenceElement.processConstructorCall(field: PsiField) 
     val parent = parent
     when {
         parent is PsiNewExpression -> parent.processConstructorCall(field)
-        parent is PsiMethodCallExpression && text == "super" -> parentOfType<PsiMethod>()!!.processImplicitSuperCall(field)
+        parent is PsiMethodCallExpression && text == "super" -> parentOfType<PsiMethod>()!!.processImplicitSuperCall(
+            field
+        )
     }
 }
 
@@ -191,14 +216,13 @@ private fun PsiNewExpression.processConstructorCall(field: PsiField) {
 
     val setterStatement = setterArgument.parentOfType<PsiStatement>()!!
 
-    if (setterArgument is PsiReferenceExpression) {
-        setterArgument
-            .resolve()
-            .cast<PsiVariable>()
-            .liftUpStatementsInRange(parentOfType()!!, setterStatement)
-    }
+    val parentOfType = parentOfType<PsiStatement>()!!
+    val createExpressionFromText =
+        factory.createStatementFromText(parentOfType.text, parentOfType.parentOfType<PsiBlockStatement>())
 
-    setterStatement.delete()
+    setterStatement.replace(createExpressionFromText)
+
+    parentOfType.delete()
 }
 
 private fun PsiNewExpression.getBeanAnnotatedMethod(): PsiMethod? {
@@ -211,8 +235,8 @@ private fun PsiNewExpression.getBeanAnnotatedMethod(): PsiMethod? {
 
 private fun PsiVariable.getSetterArgument(field: PsiField): PsiExpression? {
     val setterArguments = ReferencesSearch
-            .search(this)
-            .mapNotNull { it.getSetterArgumentExpression(field) }
+        .search(this)
+        .mapNotNull { it.getSetterArgumentExpression(field) }
 
     if (setterArguments.size != 1) return null
 
@@ -249,36 +273,6 @@ private fun PsiNewExpression.getPsiVariable(): PsiVariable? {
         }
         else -> null
     }
-}
-
-private fun PsiVariable.liftUpStatementsInRange(initializerStatement: PsiStatement, setterStatement: PsiStatement) {
-    val declarationStatement = parentOfType<PsiDeclarationStatement>()!!
-    val block = declarationStatement.parentOfType<PsiCodeBlock>()!!
-
-    val references = ReferencesSearch.search(this).findAll()
-
-    declarationStatement.process(initializerStatement, setterStatement, block)
-
-    references.forEach {
-        it.element.parentOfType<PsiStatement>()!!.process(initializerStatement, setterStatement, block)
-    }
-}
-
-private fun PsiStatement.process(initializerStatement: PsiStatement, setterStatement: PsiStatement, block: PsiCodeBlock) {
-    if (initializerStatement.isBeforeStatementInBlock(this, block) and isBeforeStatementInBlock(setterStatement, block)) {
-        block.addBefore(this, initializerStatement)
-        delete()
-    }
-}
-
-private fun PsiStatement.isBeforeStatementInBlock(statement: PsiStatement, block: PsiCodeBlock): Boolean {
-    if (parent != block) return false
-
-    if (statement.parent != block) return false
-
-    val statements = block.statements
-
-    return statements.indexOf(this) < statements.indexOf(statement)
 }
 
 private fun PropertyReference.processXmlPropertyReference() {
@@ -328,8 +322,8 @@ private fun PsiClass.getOrCreateConstructor(): PsiMethod = if (constructors.isEm
 
 private fun PsiClass.addDefaultConstructor(): PsiMethod {
     val defaultConstructor = factory.createMethodFromText(
-            "public $name() {\nsuper();\n}",
-            this
+        "public $name() {\nsuper();\n}",
+        this
     )
 
     val firstOrNull = methods.firstOrNull()
