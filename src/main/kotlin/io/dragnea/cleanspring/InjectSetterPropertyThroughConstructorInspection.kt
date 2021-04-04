@@ -116,7 +116,7 @@ private fun PsiMethod.allUsagesAreRightAfterConstructorCall(): Boolean {
         val block = psiVariable.parentOfType<PsiCodeBlock>() ?: return@map false
 
         val statements = ReferencesSearch.search(psiVariable, LocalSearchScope(block)).mapNotNull {
-            it.element.parentOfType()
+            it.element.parentOfType<PsiStatement>()
         }
 
         val setterStatement = referenceExpression.parentOfType<PsiStatement>() ?: return@map false
