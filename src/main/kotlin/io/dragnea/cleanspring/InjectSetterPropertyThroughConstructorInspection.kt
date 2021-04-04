@@ -130,11 +130,13 @@ private fun PsiMethod.allUsagesAreRightAfterConstructorCall(): Boolean {
 }
 
 private fun PsiClass.processImplicitSuperCall(field: PsiField) {
-    val normalizedConstructor = getNormalizedConstructor()
+    getNormalizedConstructor().propagateParameterToSuperCall(field)
+}
 
-    val query = ReferencesSearch.search(normalizedConstructor).findAll()
+private fun PsiMethod.propagateParameterToSuperCall(field: PsiField) {
+    val query = ReferencesSearch.search(this).findAll()
 
-    normalizedConstructor.processImplicitSuperCall(field)
+    processImplicitSuperCall(field)
 
     query.processConstructorUsages(field)
 }
@@ -186,9 +188,7 @@ private fun PsiJavaCodeReferenceElement.processConstructorCall(field: PsiField) 
     val parent = parent
     when {
         parent is PsiNewExpression -> parent.processConstructorCall(field)
-        parent is PsiMethodCallExpression && text == "super" -> parentOfType<PsiMethod>()!!.processImplicitSuperCall(
-            field
-        )
+        parent is PsiMethodCallExpression && text == "super" -> parentOfType<PsiMethod>()!!.propagateParameterToSuperCall(field)
     }
 }
 
