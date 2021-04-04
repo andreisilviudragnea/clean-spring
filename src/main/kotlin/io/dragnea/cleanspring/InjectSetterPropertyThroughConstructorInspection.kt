@@ -193,15 +193,7 @@ private fun PsiJavaCodeReferenceElement.processConstructorCall(field: PsiField) 
 }
 
 private fun PsiNewExpression.processConstructorCall(field: PsiField) {
-    val beanAnnotatedMethod = getBeanAnnotatedMethod()
-
     val argumentList = argumentList!!
-
-    if (beanAnnotatedMethod != null) {
-        beanAnnotatedMethod.addParameter(field)
-        argumentList.add(factory.createExpressionFromText(field.name, this))
-        return
-    }
 
     val psiVariable = getPsiVariable() ?: return
 
@@ -223,14 +215,6 @@ private fun PsiNewExpression.processConstructorCall(field: PsiField) {
     setterStatement.replace(createExpressionFromText)
 
     parentOfType.delete()
-}
-
-private fun PsiNewExpression.getBeanAnnotatedMethod(): PsiMethod? {
-    val psiMethod = parentOfType<PsiMethod>() ?: return null
-
-    if (!psiMethod.hasAnnotation("org.springframework.context.annotation.Bean")) return null
-
-    return psiMethod
 }
 
 private fun PsiVariable.getSetterArgument(field: PsiField): PsiExpression? {
