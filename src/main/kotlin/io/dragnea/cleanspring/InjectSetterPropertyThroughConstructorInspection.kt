@@ -129,31 +129,9 @@ private fun PsiMethod.allUsagesAreRightAfterConstructorCall(): Boolean {
     }.all { it }
 }
 
-private fun PsiClass.processImplicitSuperCall(field: PsiField) {
-    getNormalizedConstructor().propagateParameterToSuperCall(field)
-}
-
-private fun PsiMethod.propagateParameterToSuperCall(field: PsiField) {
+private fun PsiMethod.propagateParameterToSuperCallAndConstructorUsages(field: PsiField) {
     val query = ReferencesSearch.search(this).findAll()
 
-    processImplicitSuperCall(field)
-
-    query.processConstructorUsages(field)
-}
-
-private fun Collection<PsiReference>.processConstructorUsages(fieldIsSetterOf: PsiField) {
-    forEach {
-        val javaCodeReferenceElement = it.castSafelyTo<PsiJavaCodeReferenceElement>() ?: return@forEach
-
-        when (val element = javaCodeReferenceElement.element) {
-            is PsiClass -> element.processImplicitSuperCall(fieldIsSetterOf)
-            is PsiMethod -> element.containingClass!!.processImplicitSuperCall(fieldIsSetterOf)
-            else -> javaCodeReferenceElement.processConstructorCall(fieldIsSetterOf)
-        }
-    }
-}
-
-private fun PsiMethod.processImplicitSuperCall(field: PsiField) {
     addParameter(field)
 
     val superCall = body!!
@@ -163,6 +141,40 @@ private fun PsiMethod.processImplicitSuperCall(field: PsiField) {
         .cast<PsiMethodCallExpression>()
 
     superCall.argumentList.add(field.factory.createExpressionFromText(field.name, this))
+
+    query.processConstructorUsages(field)
+}
+
+private fun Collection<PsiReference>.processConstructorUsages(field: PsiField) {
+    forEach {
+        val reference = it.castSafelyTo<PsiJavaCodeReferenceElement>() ?: return@forEach
+
+        when (val element = reference.element) {
+            is PsiClass -> {
+                element
+                    .getNormalizedConstructor()
+                    .propagateParameterToSuperCallAndConstructorUsages(field)
+            }
+            is PsiMethod -> {
+                element
+                    .containingClass!!
+                    .getNormalizedConstructor()
+                    .propagateParameterToSuperCallAndConstructorUsages(field)
+            }
+            else -> {
+                when (val parent = reference.parent) {
+                    is PsiNewExpression -> parent.replaceFirstSetterWithConstructorCall(field)
+                    is PsiMethodCallExpression -> {
+                        if (reference.text == "super") {
+                            reference
+                                .parentOfType<PsiMethod>()!!
+                                .propagateParameterToSuperCallAndConstructorUsages(field)
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 private fun PsiField.propagate(setterClass: PsiClass) {
@@ -184,15 +196,7 @@ private fun PsiField.propagate(setterClass: PsiClass) {
     }
 }
 
-private fun PsiJavaCodeReferenceElement.processConstructorCall(field: PsiField) {
-    val parent = parent
-    when {
-        parent is PsiNewExpression -> parent.processConstructorCall(field)
-        parent is PsiMethodCallExpression && text == "super" -> parentOfType<PsiMethod>()!!.propagateParameterToSuperCall(field)
-    }
-}
-
-private fun PsiNewExpression.processConstructorCall(field: PsiField) {
+private fun PsiNewExpression.replaceFirstSetterWithConstructorCall(field: PsiField) {
     val argumentList = argumentList!!
 
     val psiVariable = getPsiVariable()
