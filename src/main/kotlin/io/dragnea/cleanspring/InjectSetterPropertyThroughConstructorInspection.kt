@@ -28,6 +28,7 @@ import com.intellij.psi.PsiStatement
 import com.intellij.psi.PsiThisExpression
 import com.intellij.psi.PsiType
 import com.intellij.psi.PsiVariable
+import com.intellij.psi.search.LocalSearchScope
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.psi.util.parentOfType
 import com.intellij.psi.xml.XmlTag
@@ -35,7 +36,6 @@ import com.intellij.spring.model.properties.PropertyReference
 import com.intellij.util.castSafelyTo
 import org.jetbrains.kotlin.idea.util.application.runWriteAction
 import org.jetbrains.kotlin.utils.addToStdlib.cast
-import org.jetbrains.kotlin.utils.addToStdlib.firstIsInstanceOrNull
 
 class InjectSetterPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspectionTool() {
     override fun buildVisitor(holder: ProblemsHolder, isOnTheFly: Boolean): PsiElementVisitor {
@@ -99,15 +99,13 @@ private fun PsiMethod.isCandidate(): Boolean {
         return true
     }
 
-    if (ReferencesSearch.search(this).firstIsInstanceOrNull<PropertyReference>() != null) {
-        return true
-    }
-
     return false
 }
 
 private fun PsiMethod.allUsagesAreRightAfterConstructorCall(): Boolean {
     return ReferencesSearch.search(this).map {
+        it !is PropertyReference || return@map true
+
         val referenceExpression = it.element.castSafelyTo<PsiReferenceExpression>() ?: return@map false
 
         val qualifierExpression =
@@ -115,11 +113,11 @@ private fun PsiMethod.allUsagesAreRightAfterConstructorCall(): Boolean {
 
         val psiVariable = qualifierExpression.resolve().castSafelyTo<PsiVariable>() ?: return@map false
 
-        val statements = ReferencesSearch.search(psiVariable).mapNotNull {
-            it.element.parentOfType<PsiStatement>()
-        }
-
         val block = psiVariable.parentOfType<PsiCodeBlock>() ?: return@map false
+
+        val statements = ReferencesSearch.search(psiVariable, LocalSearchScope(block)).mapNotNull {
+            it.element.parentOfType()
+        }
 
         val setterStatement = referenceExpression.parentOfType<PsiStatement>() ?: return@map false
 
