@@ -8,12 +8,12 @@ group = "io.dragnea"
 version = "1.0-SNAPSHOT"
 
 intellij {
-    version = "IU-2020.3.3"
+    version = "IU-2021.1"
 
     setPlugins(
             "java",
             "Spring",
-            "org.jetbrains.kotlin:203-1.4.32-release-IJ7148.5"
+            "org.jetbrains.kotlin:211-1.4.32-release-IJ6693.72"
     )
 
     updateSinceUntilBuild = false
