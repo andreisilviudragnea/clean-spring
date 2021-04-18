@@ -7,6 +7,7 @@ import com.intellij.codeInspection.ProblemHighlightType
 import com.intellij.codeInspection.ProblemsHolder
 import com.intellij.openapi.project.Project
 import com.intellij.psi.JavaElementVisitor
+import com.intellij.psi.PsiAnnotation
 import com.intellij.psi.PsiAssignmentExpression
 import com.intellij.psi.PsiBlockStatement
 import com.intellij.psi.PsiClass
@@ -74,9 +75,13 @@ class InjectSetterPropertyThroughConstructorInspection : AbstractBaseJavaLocalIn
 
                 val query = ReferencesSearch.search(normalizedConstructor).findAll()
 
-                fieldIsSetterOf.propagate(setterMethod.containingClass!!)
-
-                query.processConstructorUsages(fieldIsSetterOf)
+                PropertyInjectionContext(
+                    fieldIsSetterOf,
+                    setterMethod.getAnnotation("org.springframework.beans.factory.annotation.Qualifier")
+                ).apply {
+                    propagate(setterMethod.containingClass!!, fieldClass)
+                    query.processConstructorUsages()
+                }
 
                 ReferencesSearch
                     .search(setterMethod)
@@ -91,6 +96,139 @@ class InjectSetterPropertyThroughConstructorInspection : AbstractBaseJavaLocalIn
         }
 
         override fun startInWriteAction() = false
+    }
+}
+
+private data class PropertyInjectionContext(
+    val field: PsiField,
+    val qualifierAnnotation: PsiAnnotation?
+) {
+    private fun PsiMethod.propagateParameterToSuperCallAndConstructorUsages() {
+        val query = ReferencesSearch.search(this).findAll()
+
+        addParameter()
+
+        val superCall = body!!
+            .statements[0]
+            .cast<PsiExpressionStatement>()
+            .expression
+            .cast<PsiMethodCallExpression>()
+
+        superCall.argumentList.add(field.factory.createExpressionFromText(field.name, this))
+
+        query.processConstructorUsages()
+    }
+
+    fun Collection<PsiReference>.processConstructorUsages() {
+        forEach {
+            val reference = it.castSafelyTo<PsiJavaCodeReferenceElement>() ?: return@forEach
+
+            when (val element = reference.element) {
+                is PsiClass -> {
+                    element
+                        .getNormalizedConstructor()
+                        .propagateParameterToSuperCallAndConstructorUsages()
+                }
+                is PsiMethod -> {
+                    element
+                        .containingClass!!
+                        .getNormalizedConstructor()
+                        .propagateParameterToSuperCallAndConstructorUsages()
+                }
+                else -> {
+                    when (val parent = reference.parent) {
+                        is PsiNewExpression -> parent.processConstructorCall()
+                        is PsiMethodCallExpression -> {
+                            if (reference.text == "super") {
+                                reference
+                                    .parentOfType<PsiMethod>()!!
+                                    .propagateParameterToSuperCallAndConstructorUsages()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun PsiNewExpression.processConstructorCall() {
+        val argumentList = argumentList!!
+
+        val psiVariable = getPsiVariable()
+
+        if (psiVariable == null) {
+            val beanAnnotatedMethod = getBeanAnnotatedMethod()
+
+            if (beanAnnotatedMethod == null) {
+                argumentList.add(factory.createExpressionFromText("null", this))
+                return
+            }
+
+            beanAnnotatedMethod.addParameter()
+            argumentList.add(factory.createExpressionFromText(field.name, this))
+            return
+        }
+
+        val setterArgument = psiVariable.getSetterArgument(field)
+
+        if (setterArgument == null) {
+            argumentList.add(factory.createExpressionFromText("null", this))
+            return
+        }
+
+        argumentList.add(setterArgument)
+
+        val setterStatement = setterArgument.parentOfType<PsiStatement>()!!
+
+        val constructorStatement = parentOfType<PsiStatement>()!!
+
+        setterStatement.replace(
+            factory.createStatementFromText(
+                constructorStatement.text,
+                constructorStatement.parentOfType<PsiBlockStatement>()
+            )
+        )
+
+        constructorStatement.delete()
+    }
+
+    private fun PsiMethod.addParameter() {
+        findSuperMethods().forEach {
+            it.addParameter()
+        }
+
+        parameterList.add(factory.createParameter(field.name, field.type))
+    }
+
+    private fun PsiMethod.injectField() {
+        addParameter()
+
+        val name = field.name
+        body?.add(factory.createStatementFromText("this.$name = $name;", this))
+    }
+
+    private fun PsiMethod.propagateField() {
+        addParameter()
+
+        val superCall = body!!.statements[0].cast<PsiMethodCallExpression>()
+        superCall.argumentList.add(factory.createExpressionFromText(field.name, this))
+    }
+
+    fun propagate(setterClass: PsiClass, fieldContainingClass: PsiClass) {
+        var currentClass = setterClass
+
+        while (true) {
+            val normalizedConstructor = currentClass.getNormalizedConstructor()
+
+            if (currentClass == fieldContainingClass) {
+                normalizedConstructor.injectField()
+                break
+            }
+
+            normalizedConstructor.propagateField()
+
+            currentClass = currentClass.superClass!!
+        }
     }
 }
 
@@ -125,114 +263,6 @@ private fun PsiMethod.allUsagesAreRightAfterConstructorCall(): Boolean {
 
         firstReferencedStatement == setterStatement
     }.all { it }
-}
-
-private fun PsiMethod.propagateParameterToSuperCallAndConstructorUsages(field: PsiField) {
-    val query = ReferencesSearch.search(this).findAll()
-
-    addParameter(field)
-
-    val superCall = body!!
-        .statements[0]
-        .cast<PsiExpressionStatement>()
-        .expression
-        .cast<PsiMethodCallExpression>()
-
-    superCall.argumentList.add(field.factory.createExpressionFromText(field.name, this))
-
-    query.processConstructorUsages(field)
-}
-
-private fun Collection<PsiReference>.processConstructorUsages(field: PsiField) {
-    forEach {
-        val reference = it.castSafelyTo<PsiJavaCodeReferenceElement>() ?: return@forEach
-
-        when (val element = reference.element) {
-            is PsiClass -> {
-                element
-                    .getNormalizedConstructor()
-                    .propagateParameterToSuperCallAndConstructorUsages(field)
-            }
-            is PsiMethod -> {
-                element
-                    .containingClass!!
-                    .getNormalizedConstructor()
-                    .propagateParameterToSuperCallAndConstructorUsages(field)
-            }
-            else -> {
-                when (val parent = reference.parent) {
-                    is PsiNewExpression -> parent.processConstructorCall(field)
-                    is PsiMethodCallExpression -> {
-                        if (reference.text == "super") {
-                            reference
-                                .parentOfType<PsiMethod>()!!
-                                .propagateParameterToSuperCallAndConstructorUsages(field)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-private fun PsiField.propagate(setterClass: PsiClass) {
-    val fieldClass = containingClass!!
-
-    var currentClass = setterClass
-
-    while (true) {
-        val normalizedConstructor = currentClass.getNormalizedConstructor()
-
-        if (currentClass == fieldClass) {
-            normalizedConstructor.injectField(this)
-            break
-        }
-
-        normalizedConstructor.propagateField(this)
-
-        currentClass = currentClass.superClass!!
-    }
-}
-
-private fun PsiNewExpression.processConstructorCall(field: PsiField) {
-    val argumentList = argumentList!!
-
-    val psiVariable = getPsiVariable()
-
-    if (psiVariable == null) {
-        val beanAnnotatedMethod = getBeanAnnotatedMethod()
-
-        if (beanAnnotatedMethod == null) {
-            argumentList.add(factory.createExpressionFromText("null", this))
-            return
-        }
-
-        beanAnnotatedMethod.addParameter(field)
-        argumentList.add(factory.createExpressionFromText(field.name, this))
-        return
-    }
-
-    val setterArgument = psiVariable.getSetterArgument(field)
-
-    if (setterArgument == null) {
-        argumentList.add(factory.createExpressionFromText("null", this))
-        return
-    }
-
-    argumentList.add(setterArgument)
-
-    val setterStatement = setterArgument.parentOfType<PsiStatement>()!!
-
-    val constructorStatement = parentOfType<PsiStatement>()!!
-
-    setterStatement.replace(
-        factory.createStatementFromText(
-            constructorStatement.text,
-            constructorStatement.parentOfType<PsiBlockStatement>()
-        )
-    )
-
-    constructorStatement.delete()
 }
 
 private fun PsiNewExpression.getBeanAnnotatedMethod(): PsiMethod? {
@@ -345,28 +375,6 @@ private fun PsiClass.addDefaultConstructor(): PsiMethod {
     }
 
     return psiElement.cast()
-}
-
-private fun PsiMethod.injectField(psiField: PsiField) {
-    addParameter(psiField)
-
-    val name = psiField.name
-    body?.add(factory.createStatementFromText("this.$name = $name;", this))
-}
-
-private fun PsiMethod.addParameter(psiField: PsiField) {
-    findSuperMethods().forEach {
-        it.addParameter(psiField)
-    }
-
-    parameterList.add(factory.createParameter(psiField.name, psiField.type))
-}
-
-private fun PsiMethod.propagateField(psiField: PsiField) {
-    addParameter(psiField)
-
-    val superCall = body!!.statements[0].cast<PsiMethodCallExpression>()
-    superCall.argumentList.add(factory.createExpressionFromText(psiField.name, this))
 }
 
 private fun PsiMethod.fieldIsSetterOf(): PsiField? {
