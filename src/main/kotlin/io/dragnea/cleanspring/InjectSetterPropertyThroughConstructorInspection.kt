@@ -161,7 +161,7 @@ private fun Collection<PsiReference>.processConstructorUsages(field: PsiField) {
             }
             else -> {
                 when (val parent = reference.parent) {
-                    is PsiNewExpression -> parent.replaceFirstSetterWithConstructorCall(field)
+                    is PsiNewExpression -> parent.processConstructorCall(field)
                     is PsiMethodCallExpression -> {
                         if (reference.text == "super") {
                             reference
@@ -194,14 +194,20 @@ private fun PsiField.propagate(setterClass: PsiClass) {
     }
 }
 
-private fun PsiNewExpression.replaceFirstSetterWithConstructorCall(field: PsiField) {
+private fun PsiNewExpression.processConstructorCall(field: PsiField) {
     val argumentList = argumentList!!
 
     val psiVariable = getPsiVariable()
 
     if (psiVariable == null) {
-        getBeanAnnotatedMethod()?.addParameter(field)
+        val beanAnnotatedMethod = getBeanAnnotatedMethod()
 
+        if (beanAnnotatedMethod == null) {
+            argumentList.add(factory.createExpressionFromText("null", this))
+            return
+        }
+
+        beanAnnotatedMethod.addParameter(field)
         argumentList.add(factory.createExpressionFromText(field.name, this))
         return
     }
