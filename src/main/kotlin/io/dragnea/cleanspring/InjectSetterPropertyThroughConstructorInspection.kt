@@ -223,13 +223,16 @@ private fun PsiNewExpression.processConstructorCall(field: PsiField) {
 
     val setterStatement = setterArgument.parentOfType<PsiStatement>()!!
 
-    val parentOfType = parentOfType<PsiStatement>()!!
-    val createExpressionFromText =
-        factory.createStatementFromText(parentOfType.text, parentOfType.parentOfType<PsiBlockStatement>())
+    val constructorStatement = parentOfType<PsiStatement>()!!
 
-    setterStatement.replace(createExpressionFromText)
+    setterStatement.replace(
+        factory.createStatementFromText(
+            constructorStatement.text,
+            constructorStatement.parentOfType<PsiBlockStatement>()
+        )
+    )
 
-    parentOfType.delete()
+    constructorStatement.delete()
 }
 
 private fun PsiNewExpression.getBeanAnnotatedMethod(): PsiMethod? {
