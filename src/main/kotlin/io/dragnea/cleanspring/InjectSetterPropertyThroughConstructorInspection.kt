@@ -197,7 +197,10 @@ private data class PropertyInjectionContext(
             it.addParameter()
         }
 
-        parameterList.add(factory.createParameter(field.name, field.type))
+        parameterList.add(factory.createParameterFromText(
+            "${if (qualifierAnnotation != null) "${qualifierAnnotation.text} " else ""}${field.type.presentableText} ${field.name}",
+            this
+        ))
     }
 
     private fun PsiMethod.injectField() {
