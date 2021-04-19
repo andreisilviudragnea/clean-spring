@@ -78,7 +78,8 @@ class InjectSetterPropertyThroughConstructorInspection : AbstractBaseJavaLocalIn
 
                 PropertyInjectionContext(
                     fieldIsSetterOf,
-                    setterMethod.getAnnotation("org.springframework.beans.factory.annotation.Qualifier")
+                    setterMethod.getAnnotation("org.springframework.beans.factory.annotation.Qualifier"),
+                    setterMethod.parameterList.parameters[0].getAnnotation("org.springframework.beans.factory.annotation.Value")
                 ).apply {
                     propagate(setterMethod.containingClass!!, fieldClass)
                     query.processConstructorUsages()
@@ -102,8 +103,8 @@ class InjectSetterPropertyThroughConstructorInspection : AbstractBaseJavaLocalIn
 
 private data class PropertyInjectionContext(
     val field: PsiField,
-    // TODO: Propagate @Value annotation
-    val qualifierAnnotation: PsiAnnotation?
+    val qualifierAnnotation: PsiAnnotation?,
+    val valueAnnotation: PsiAnnotation?
 ) {
     private fun PsiMethod.propagateParameterToSuperCallAndConstructorUsages() {
         val query = ReferencesSearch.search(this).findAll()
@@ -162,8 +163,7 @@ private data class PropertyInjectionContext(
             val beanAnnotatedMethod = getBeanAnnotatedMethod()
 
             if (beanAnnotatedMethod == null) {
-                // TODO: Add type-specific default value instead of null
-                argumentList.add(factory.createExpressionFromText("null", this))
+                argumentList.add(factory.createExpressionFromText(field.type.defaultValue, this))
                 return
             }
 
@@ -175,8 +175,7 @@ private data class PropertyInjectionContext(
         val setterArgument = psiVariable.getSetterArgument(field)
 
         if (setterArgument == null) {
-            // TODO: Add type-specific default value instead of null
-            argumentList.add(factory.createExpressionFromText("null", this))
+            argumentList.add(factory.createExpressionFromText(field.type.defaultValue, this))
             return
         }
 
@@ -205,8 +204,14 @@ private data class PropertyInjectionContext(
             .add(factory.createParameter(field.name, field.type))
             .cast<PsiParameter>()
 
+        val modifierList = parameter.modifierList!!
+
         if (qualifierAnnotation != null) {
-            parameter.modifierList!!.add(qualifierAnnotation)
+            modifierList.add(qualifierAnnotation)
+        }
+
+        if (valueAnnotation != null) {
+            modifierList.add(valueAnnotation)
         }
     }
 
@@ -254,12 +259,15 @@ private fun PsiMethod.allUsagesAreRightAfterConstructorCall(): Boolean {
     return ReferencesSearch.search(this).map {
         it !is PropertyReference || return@map true
 
-        val referenceExpression = it.element.castSafelyTo<PsiReferenceExpression>() ?: return@map false
+        val referenceExpression =
+            it.element.castSafelyTo<PsiReferenceExpression>() ?: return@map false
 
         val qualifierExpression =
-            referenceExpression.qualifierExpression.castSafelyTo<PsiReferenceExpression>() ?: return@map false
+            referenceExpression.qualifierExpression.castSafelyTo<PsiReferenceExpression>()
+                ?: return@map false
 
-        val psiVariable = qualifierExpression.resolve().castSafelyTo<PsiVariable>() ?: return@map false
+        val psiVariable =
+            qualifierExpression.resolve().castSafelyTo<PsiVariable>() ?: return@map false
 
         val block = psiVariable.parentOfType<PsiCodeBlock>() ?: return@map false
 
@@ -269,7 +277,8 @@ private fun PsiMethod.allUsagesAreRightAfterConstructorCall(): Boolean {
 
         val setterStatement = referenceExpression.parentOfType<PsiStatement>() ?: return@map false
 
-        val firstReferencedStatement = block.statements.firstOrNull { it in statements } ?: return@map false
+        val firstReferencedStatement =
+            block.statements.firstOrNull { it in statements } ?: return@map false
 
         firstReferencedStatement == setterStatement
     }.all { it }
@@ -318,7 +327,8 @@ private fun PsiNewExpression.getPsiVariable(): PsiVariable? {
             parent
         }
         is PsiAssignmentExpression -> {
-            val psiReferenceExpression = parent.lExpression.castSafelyTo<PsiReferenceExpression>() ?: return null
+            val psiReferenceExpression =
+                parent.lExpression.castSafelyTo<PsiReferenceExpression>() ?: return null
             psiReferenceExpression.resolve().cast()
         }
         else -> null
@@ -402,13 +412,16 @@ private fun PsiMethod.fieldIsSetterOf(): PsiField? {
 
     val expressionStatement = statements[0].castSafelyTo<PsiExpressionStatement>() ?: return null
 
-    val assignmentExpression = expressionStatement.expression.castSafelyTo<PsiAssignmentExpression>() ?: return null
+    val assignmentExpression =
+        expressionStatement.expression.castSafelyTo<PsiAssignmentExpression>() ?: return null
 
-    val lExpression = assignmentExpression.lExpression.castSafelyTo<PsiReferenceExpression>() ?: return null
+    val lExpression =
+        assignmentExpression.lExpression.castSafelyTo<PsiReferenceExpression>() ?: return null
 
     lExpression.qualifierExpression.castSafelyTo<PsiThisExpression>() ?: return null
 
-    val rExpression = assignmentExpression.rExpression.castSafelyTo<PsiReferenceExpression>() ?: return null
+    val rExpression =
+        assignmentExpression.rExpression.castSafelyTo<PsiReferenceExpression>() ?: return null
 
     if (rExpression.resolve() != parameters[0]) return null
 
@@ -420,3 +433,16 @@ private fun PsiMethod.fieldIsSetterOf(): PsiField? {
 }
 
 private fun PsiMethod.returnsVoid() = returnType == PsiType.VOID
+
+private val PsiType.defaultValue
+    get() = when {
+        this == PsiType.BYTE -> "0"
+        this == PsiType.CHAR -> "0"
+        this == PsiType.DOUBLE -> "0"
+        this == PsiType.FLOAT -> "0"
+        this == PsiType.INT -> "0"
+        this == PsiType.LONG -> "0"
+        this == PsiType.SHORT -> "0"
+        this == PsiType.BOOLEAN -> "false"
+        else -> "null"
+    }
