@@ -79,6 +79,8 @@ class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspecti
                     }
                 }
 
+                // TODO: Clean redundant super() calls
+
                 ReferencesSearch
                     .search(setterMethod)
                     .forEach {
