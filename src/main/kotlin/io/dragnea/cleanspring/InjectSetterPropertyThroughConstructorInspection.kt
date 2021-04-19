@@ -77,7 +77,7 @@ class InjectSetterPropertyThroughConstructorInspection : AbstractBaseJavaLocalIn
                 val query = ReferencesSearch.search(normalizedConstructor).findAll()
 
                 PropertyInjectionContext(setterParameter).apply {
-                    propagate(setterMethod.containingClass!!, setterClass)
+                    normalizedConstructor.propagateParameter()
                     query.processConstructorUsages()
                 }
 
@@ -263,33 +263,9 @@ private data class PropertyInjectionContext(
         }
     }
 
-    private fun PsiMethod.injectParameter() {
+    fun PsiMethod.propagateParameter() {
+        addParameter()
         body?.add(setterParameter.getContainingMethod()!!.body!!.statements[0])
-    }
-
-    private fun PsiMethod.propagateParameter() {
-        val superCall = body!!.statements[0].cast<PsiMethodCallExpression>()
-        superCall.argumentList.add(factory.createExpressionFromText(setterParameter.name, this))
-    }
-
-    // TODO: Maybe simplify this
-    fun propagate(setterClass: PsiClass, fieldContainingClass: PsiClass) {
-        var currentClass = setterClass
-
-        while (true) {
-            val normalizedConstructor = currentClass.getNormalizedConstructor()
-
-            normalizedConstructor.addParameter()
-
-            if (currentClass == fieldContainingClass) {
-                normalizedConstructor.injectParameter()
-                break
-            }
-
-            normalizedConstructor.propagateParameter()
-
-            currentClass = currentClass.superClass!!
-        }
     }
 }
 
