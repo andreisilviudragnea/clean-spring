@@ -102,6 +102,7 @@ class InjectSetterPropertyThroughConstructorInspection : AbstractBaseJavaLocalIn
 
 private data class PropertyInjectionContext(
     val field: PsiField,
+    // TODO: Propagate @Value annotation
     val qualifierAnnotation: PsiAnnotation?
 ) {
     private fun PsiMethod.propagateParameterToSuperCallAndConstructorUsages() {
@@ -161,6 +162,7 @@ private data class PropertyInjectionContext(
             val beanAnnotatedMethod = getBeanAnnotatedMethod()
 
             if (beanAnnotatedMethod == null) {
+                // TODO: Add type-specific default value instead of null
                 argumentList.add(factory.createExpressionFromText("null", this))
                 return
             }
@@ -173,6 +175,7 @@ private data class PropertyInjectionContext(
         val setterArgument = psiVariable.getSetterArgument(field)
 
         if (setterArgument == null) {
+            // TODO: Add type-specific default value instead of null
             argumentList.add(factory.createExpressionFromText("null", this))
             return
         }
