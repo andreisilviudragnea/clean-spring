@@ -71,6 +71,9 @@ class InjectSetterPropertyThroughConstructorInspection : AbstractBaseJavaLocalIn
 
             val fieldClass = fieldIsSetterOf.containingClass!!
 
+            // TODO: Use type of setter parameter
+            // TODO: Propagate qualifier annotation from setter parameter
+
             runWriteAction {
                 val normalizedConstructor = fieldClass.getNormalizedConstructor()
 
