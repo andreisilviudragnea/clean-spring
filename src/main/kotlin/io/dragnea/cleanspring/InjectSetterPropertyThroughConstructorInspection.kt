@@ -17,7 +17,6 @@ import com.intellij.psi.PsiElementFactory
 import com.intellij.psi.PsiElementVisitor
 import com.intellij.psi.PsiExpression
 import com.intellij.psi.PsiExpressionStatement
-import com.intellij.psi.PsiField
 import com.intellij.psi.PsiJavaCodeReferenceElement
 import com.intellij.psi.PsiKeyword
 import com.intellij.psi.PsiMethod
@@ -37,13 +36,15 @@ import com.intellij.psi.xml.XmlTag
 import com.intellij.spring.model.properties.PropertyReference
 import com.intellij.util.castSafelyTo
 import org.jetbrains.kotlin.idea.util.application.runWriteAction
+import org.jetbrains.kotlin.j2k.getContainingClass
+import org.jetbrains.kotlin.j2k.getContainingMethod
 import org.jetbrains.kotlin.utils.addToStdlib.cast
 
 class InjectSetterPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspectionTool() {
     override fun buildVisitor(holder: ProblemsHolder, isOnTheFly: Boolean): PsiElementVisitor {
         return object : JavaElementVisitor() {
             override fun visitMethod(method: PsiMethod) {
-                method.fieldIsSetterOf() ?: return
+                method.setterParameter() ?: return
 
                 val containingClass = method.containingClass ?: return
 
@@ -67,24 +68,17 @@ class InjectSetterPropertyThroughConstructorInspection : AbstractBaseJavaLocalIn
         override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
             val setterMethod = descriptor.psiElement.parentOfType<PsiMethod>()!!
 
-            val fieldIsSetterOf = setterMethod.fieldIsSetterOf()!!
+            val setterParameter = setterMethod.setterParameter()!!
 
-            val fieldClass = fieldIsSetterOf.containingClass!!
-
-            // TODO: Use type of setter parameter
-            // TODO: Propagate qualifier annotation from setter parameter
+            val setterClass = setterParameter.getContainingClass()!!
 
             runWriteAction {
-                val normalizedConstructor = fieldClass.getNormalizedConstructor()
+                val normalizedConstructor = setterClass.getNormalizedConstructor()
 
                 val query = ReferencesSearch.search(normalizedConstructor).findAll()
 
-                PropertyInjectionContext(
-                    fieldIsSetterOf,
-                    setterMethod.getAnnotation("org.springframework.beans.factory.annotation.Qualifier"),
-                    setterMethod.parameterList.parameters[0].getAnnotation("org.springframework.beans.factory.annotation.Value")
-                ).apply {
-                    propagate(setterMethod.containingClass!!, fieldClass)
+                PropertyInjectionContext(setterParameter).apply {
+                    propagate(setterMethod.containingClass!!, setterClass)
                     query.processConstructorUsages()
                 }
 
@@ -105,9 +99,7 @@ class InjectSetterPropertyThroughConstructorInspection : AbstractBaseJavaLocalIn
 }
 
 private data class PropertyInjectionContext(
-    val field: PsiField,
-    val qualifierAnnotation: PsiAnnotation?,
-    val valueAnnotation: PsiAnnotation?
+    val setterParameter: PsiParameter
 ) {
     private fun PsiMethod.propagateParameterToSuperCallAndConstructorUsages() {
         val query = ReferencesSearch.search(this).findAll()
@@ -120,7 +112,11 @@ private data class PropertyInjectionContext(
             .expression
             .cast<PsiMethodCallExpression>()
 
-        superCall.argumentList.add(field.factory.createExpressionFromText(field.name, this))
+        superCall.argumentList.add(
+            setterParameter.factory.createExpressionFromText(
+                setterParameter.name, this
+            )
+        )
 
         query.processConstructorUsages()
     }
@@ -166,19 +162,29 @@ private data class PropertyInjectionContext(
             val beanAnnotatedMethod = getBeanAnnotatedMethod()
 
             if (beanAnnotatedMethod == null) {
-                argumentList.add(factory.createExpressionFromText(field.type.defaultValue, this))
+                argumentList.add(
+                    factory.createExpressionFromText(
+                        setterParameter.type.defaultValue,
+                        this
+                    )
+                )
                 return
             }
 
             beanAnnotatedMethod.addParameter()
-            argumentList.add(factory.createExpressionFromText(field.name, this))
+            argumentList.add(factory.createExpressionFromText(setterParameter.name, this))
             return
         }
 
-        val setterArgument = psiVariable.getSetterArgument(field)
+        val setterArgument = psiVariable.getSetterArgument()
 
         if (setterArgument == null) {
-            argumentList.add(factory.createExpressionFromText(field.type.defaultValue, this))
+            argumentList.add(
+                factory.createExpressionFromText(
+                    setterParameter.type.defaultValue,
+                    this
+                )
+            )
             return
         }
 
@@ -198,20 +204,60 @@ private data class PropertyInjectionContext(
         constructorStatement.delete()
     }
 
+    private fun PsiVariable.getSetterArgument(): PsiExpression? {
+        val setterArguments = ReferencesSearch
+            .search(this)
+            .mapNotNull { it.getSetterArgumentExpression() }
+
+        if (setterArguments.size != 1) return null
+
+        return setterArguments[0]
+    }
+
+    private fun PsiReference.getSetterArgumentExpression(): PsiExpression? {
+        if (this !is PsiReferenceExpression) return null
+
+        val methodExpression = parent
+
+        val methodCallExpression = methodExpression.parent
+
+        if (methodCallExpression !is PsiMethodCallExpression) return null
+
+        if (methodCallExpression.methodExpression != methodExpression) return null
+
+        val method = methodCallExpression.resolveMethod() ?: return null
+
+        if (method.setterParameter() != setterParameter) return null
+
+        return methodCallExpression.argumentList.expressions[0]
+    }
+
     private fun PsiMethod.addParameter() {
         findSuperMethods().forEach {
             it.addParameter()
         }
 
         val parameter = parameterList
-            .add(factory.createParameter(field.name, field.type))
+            .add(factory.createParameter(setterParameter.name, setterParameter.type))
             .cast<PsiParameter>()
 
         val modifierList = parameter.modifierList!!
 
-        if (qualifierAnnotation != null) {
-            modifierList.add(qualifierAnnotation)
+        val qualifierSetterAnnotation = setterParameter
+            .getContainingMethod()!!
+            .getAnnotation("org.springframework.beans.factory.annotation.Qualifier")
+        if (qualifierSetterAnnotation != null) {
+            modifierList.add(qualifierSetterAnnotation)
         }
+
+        val qualifierParameterAnnotation = setterParameter
+            .getAnnotation("org.springframework.beans.factory.annotation.Qualifier")
+        if (qualifierParameterAnnotation != null) {
+            modifierList.add(qualifierParameterAnnotation)
+        }
+
+        val valueAnnotation =
+            setterParameter.getAnnotation("org.springframework.beans.factory.annotation.Value")
 
         if (valueAnnotation != null) {
             modifierList.add(valueAnnotation)
@@ -221,7 +267,7 @@ private data class PropertyInjectionContext(
     private fun PsiMethod.injectField() {
         addParameter()
 
-        val name = field.name
+        val name = setterParameter.name
         body?.add(factory.createStatementFromText("this.$name = $name;", this))
     }
 
@@ -229,7 +275,7 @@ private data class PropertyInjectionContext(
         addParameter()
 
         val superCall = body!!.statements[0].cast<PsiMethodCallExpression>()
-        superCall.argumentList.add(factory.createExpressionFromText(field.name, this))
+        superCall.argumentList.add(factory.createExpressionFromText(setterParameter.name, this))
     }
 
     fun propagate(setterClass: PsiClass, fieldContainingClass: PsiClass) {
@@ -250,13 +296,8 @@ private data class PropertyInjectionContext(
     }
 }
 
-private fun PsiMethod.isCandidate(): Boolean {
-    if (hasAnnotation("org.springframework.beans.factory.annotation.Autowired") && allUsagesAreRightAfterConstructorCall()) {
-        return true
-    }
-
-    return false
-}
+private fun PsiMethod.isCandidate() =
+    hasAnnotation("org.springframework.beans.factory.annotation.Autowired") && allUsagesAreRightAfterConstructorCall()
 
 private fun PsiMethod.allUsagesAreRightAfterConstructorCall(): Boolean {
     return ReferencesSearch.search(this).map {
@@ -293,34 +334,6 @@ private fun PsiNewExpression.getBeanAnnotatedMethod(): PsiMethod? {
     if (!psiMethod.hasAnnotation("org.springframework.context.annotation.Bean")) return null
 
     return psiMethod
-}
-
-private fun PsiVariable.getSetterArgument(field: PsiField): PsiExpression? {
-    val setterArguments = ReferencesSearch
-        .search(this)
-        .mapNotNull { it.getSetterArgumentExpression(field) }
-
-    if (setterArguments.size != 1) return null
-
-    return setterArguments[0]
-}
-
-private fun PsiReference.getSetterArgumentExpression(field: PsiField): PsiExpression? {
-    if (this !is PsiReferenceExpression) return null
-
-    val methodExpression = parent
-
-    val methodCallExpression = methodExpression.parent
-
-    if (methodCallExpression !is PsiMethodCallExpression) return null
-
-    if (methodCallExpression.methodExpression != methodExpression) return null
-
-    val method = methodCallExpression.resolveMethod() ?: return null
-
-    if (method.fieldIsSetterOf() != field) return null
-
-    return methodCallExpression.argumentList.expressions[0]
 }
 
 private fun PsiNewExpression.getPsiVariable(): PsiVariable? {
@@ -400,7 +413,7 @@ private fun PsiClass.addDefaultConstructor(): PsiMethod {
     return psiElement.cast()
 }
 
-private fun PsiMethod.fieldIsSetterOf(): PsiField? {
+private fun PsiMethod.setterParameter(): PsiParameter? {
     if (!name.matches(Regex("set\\S+"))) return null
 
     val parameters = parameterList.parameters
@@ -428,11 +441,7 @@ private fun PsiMethod.fieldIsSetterOf(): PsiField? {
 
     if (rExpression.resolve() != parameters[0]) return null
 
-    val psiField = lExpression.resolve().castSafelyTo<PsiField>() ?: return null
-
-    if (psiField.containingClass != containingClass) return null
-
-    return psiField
+    return parameters[0]
 }
 
 private fun PsiMethod.returnsVoid() = returnType == PsiType.VOID
