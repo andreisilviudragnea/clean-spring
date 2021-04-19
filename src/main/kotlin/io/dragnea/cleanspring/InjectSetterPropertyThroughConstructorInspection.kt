@@ -74,11 +74,10 @@ class InjectSetterPropertyThroughConstructorInspection : AbstractBaseJavaLocalIn
             runWriteAction {
                 val normalizedConstructor = setterClass.getNormalizedConstructor()
 
-                val query = ReferencesSearch.search(normalizedConstructor).findAll()
-
                 PropertyInjectionContext(setterParameter).apply {
-                    normalizedConstructor.propagateParameter()
-                    query.processConstructorUsages()
+                    normalizedConstructor.processConstructorUsages {
+                        body?.add(setterParameter.getContainingMethod()!!.body!!.statements[0])
+                    }
                 }
 
                 ReferencesSearch
@@ -100,27 +99,32 @@ class InjectSetterPropertyThroughConstructorInspection : AbstractBaseJavaLocalIn
 private data class PropertyInjectionContext(
     val setterParameter: PsiParameter
 ) {
-    private fun PsiMethod.propagateParameterToSuperCallAndConstructorUsages() {
+    fun PsiMethod.processConstructorUsages(block: PsiMethod.() -> Unit) {
         val query = ReferencesSearch.search(this).findAll()
 
         addParameter()
 
-        val superCall = body!!
-            .statements[0]
-            .cast<PsiExpressionStatement>()
-            .expression
-            .cast<PsiMethodCallExpression>()
-
-        superCall.argumentList.add(
-            setterParameter.factory.createExpressionFromText(
-                setterParameter.name, this
-            )
-        )
+        block()
 
         query.processConstructorUsages()
     }
 
-    fun Collection<PsiReference>.processConstructorUsages() {
+    private fun PsiMethod.propagateParameterToSuperCallAndConstructorUsages() =
+        processConstructorUsages {
+            val superCall = body!!
+                .statements[0]
+                .cast<PsiExpressionStatement>()
+                .expression
+                .cast<PsiMethodCallExpression>()
+
+            superCall.argumentList.add(
+                setterParameter.factory.createExpressionFromText(
+                    setterParameter.name, this
+                )
+            )
+        }
+
+    private fun Collection<PsiReference>.processConstructorUsages() {
         forEach {
             val reference = it.castSafelyTo<PsiJavaCodeReferenceElement>() ?: return@forEach
 
@@ -261,11 +265,6 @@ private data class PropertyInjectionContext(
         if (valueAnnotation != null) {
             modifierList.add(valueAnnotation)
         }
-    }
-
-    fun PsiMethod.propagateParameter() {
-        addParameter()
-        body?.add(setterParameter.getContainingMethod()!!.body!!.statements[0])
     }
 }
 
