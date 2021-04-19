@@ -40,7 +40,7 @@ import org.jetbrains.kotlin.j2k.getContainingClass
 import org.jetbrains.kotlin.j2k.getContainingMethod
 import org.jetbrains.kotlin.utils.addToStdlib.cast
 
-class InjectSetterPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspectionTool() {
+class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspectionTool() {
     override fun buildVisitor(holder: ProblemsHolder, isOnTheFly: Boolean): PsiElementVisitor {
         return object : JavaElementVisitor() {
             override fun visitMethod(method: PsiMethod) {
