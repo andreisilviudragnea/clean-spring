@@ -7,7 +7,6 @@ import com.intellij.codeInspection.ProblemHighlightType
 import com.intellij.codeInspection.ProblemsHolder
 import com.intellij.openapi.project.Project
 import com.intellij.psi.JavaElementVisitor
-import com.intellij.psi.PsiAnnotation
 import com.intellij.psi.PsiAssignmentExpression
 import com.intellij.psi.PsiBlockStatement
 import com.intellij.psi.PsiClass
@@ -264,32 +263,30 @@ private data class PropertyInjectionContext(
         }
     }
 
-    private fun PsiMethod.injectField() {
-        addParameter()
-
-        val name = setterParameter.name
-        body?.add(factory.createStatementFromText("this.$name = $name;", this))
+    private fun PsiMethod.injectParameter() {
+        body?.add(setterParameter.getContainingMethod()!!.body!!.statements[0])
     }
 
-    private fun PsiMethod.propagateField() {
-        addParameter()
-
+    private fun PsiMethod.propagateParameter() {
         val superCall = body!!.statements[0].cast<PsiMethodCallExpression>()
         superCall.argumentList.add(factory.createExpressionFromText(setterParameter.name, this))
     }
 
+    // TODO: Maybe simplify this
     fun propagate(setterClass: PsiClass, fieldContainingClass: PsiClass) {
         var currentClass = setterClass
 
         while (true) {
             val normalizedConstructor = currentClass.getNormalizedConstructor()
 
+            normalizedConstructor.addParameter()
+
             if (currentClass == fieldContainingClass) {
-                normalizedConstructor.injectField()
+                normalizedConstructor.injectParameter()
                 break
             }
 
-            normalizedConstructor.propagateField()
+            normalizedConstructor.propagateParameter()
 
             currentClass = currentClass.superClass!!
         }
