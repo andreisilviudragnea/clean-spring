@@ -23,6 +23,7 @@ import com.intellij.psi.PsiKeyword
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiMethodCallExpression
 import com.intellij.psi.PsiNewExpression
+import com.intellij.psi.PsiParameter
 import com.intellij.psi.PsiReference
 import com.intellij.psi.PsiReferenceExpression
 import com.intellij.psi.PsiStatement
@@ -197,11 +198,13 @@ private data class PropertyInjectionContext(
             it.addParameter()
         }
 
-        parameterList.add(factory.createParameterFromText(
-            // TODO: Fix imports missing for types specified in parameter
-            "${if (qualifierAnnotation != null) "${qualifierAnnotation.text} " else ""}${field.type.presentableText} ${field.name}",
-            this
-        ))
+        val parameter = parameterList
+            .add(factory.createParameter(field.name, field.type))
+            .cast<PsiParameter>()
+
+        if (qualifierAnnotation != null) {
+            parameter.modifierList!!.add(qualifierAnnotation)
+        }
     }
 
     private fun PsiMethod.injectField() {
