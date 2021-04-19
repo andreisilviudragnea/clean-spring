@@ -16,6 +16,7 @@ import com.intellij.psi.PsiElementFactory
 import com.intellij.psi.PsiElementVisitor
 import com.intellij.psi.PsiExpression
 import com.intellij.psi.PsiExpressionStatement
+import com.intellij.psi.PsiField
 import com.intellij.psi.PsiJavaCodeReferenceElement
 import com.intellij.psi.PsiKeyword
 import com.intellij.psi.PsiMethod
@@ -263,7 +264,9 @@ private data class PropertyInjectionContext(
 }
 
 private fun PsiMethod.isCandidate() =
-    hasAnnotation("org.springframework.beans.factory.annotation.Autowired") && allUsagesAreRightAfterConstructorCall()
+    hasAnnotation("org.springframework.beans.factory.annotation.Autowired") &&
+        allUsagesAreRightAfterConstructorCall() &&
+        fieldIsAssignedOnlyOnce()
 
 private fun PsiMethod.allUsagesAreRightAfterConstructorCall(): Boolean {
     return ReferencesSearch.search(this).map {
@@ -409,6 +412,31 @@ private fun PsiMethod.setterParameter(): PsiParameter? {
 
     return parameters[0]
 }
+
+private fun PsiMethod.getField() = body!!
+    .statements[0]
+    .cast<PsiExpressionStatement>()
+    .expression
+    .cast<PsiAssignmentExpression>()
+    .lExpression
+    .cast<PsiReferenceExpression>()
+    .resolve()
+    .cast<PsiField>()
+
+private fun PsiMethod.fieldIsAssignedOnlyOnce(): Boolean = ReferencesSearch
+    .search(getField())
+    .map {
+        if (it !is PsiReferenceExpression) return@map false
+
+        val parent = it.element.parent
+
+        if (parent !is PsiAssignmentExpression) return@map false
+
+        parent.lExpression == it || return@map false
+
+        true
+    }
+    .count { it } == 1
 
 private fun PsiMethod.returnsVoid() = returnType == PsiType.VOID
 
