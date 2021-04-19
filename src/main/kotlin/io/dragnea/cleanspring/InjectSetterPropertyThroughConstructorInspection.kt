@@ -72,10 +72,8 @@ class InjectSetterPropertyThroughConstructorInspection : AbstractBaseJavaLocalIn
             val setterClass = setterParameter.getContainingClass()!!
 
             runWriteAction {
-                val normalizedConstructor = setterClass.getNormalizedConstructor()
-
                 PropertyInjectionContext(setterParameter).apply {
-                    normalizedConstructor.processConstructorUsages {
+                    setterClass.getNormalizedConstructor().processConstructorUsages {
                         body?.add(setterParameter.getContainingMethod()!!.body!!.statements[0])
                     }
                 }
@@ -106,26 +104,7 @@ private data class PropertyInjectionContext(
 
         block()
 
-        query.processConstructorUsages()
-    }
-
-    private fun PsiMethod.propagateParameterToSuperCallAndConstructorUsages() =
-        processConstructorUsages {
-            val superCall = body!!
-                .statements[0]
-                .cast<PsiExpressionStatement>()
-                .expression
-                .cast<PsiMethodCallExpression>()
-
-            superCall.argumentList.add(
-                setterParameter.factory.createExpressionFromText(
-                    setterParameter.name, this
-                )
-            )
-        }
-
-    private fun Collection<PsiReference>.processConstructorUsages() {
-        forEach {
+        query.forEach {
             val reference = it.castSafelyTo<PsiJavaCodeReferenceElement>() ?: return@forEach
 
             when (val element = reference.element) {
@@ -155,6 +134,21 @@ private data class PropertyInjectionContext(
             }
         }
     }
+
+    private fun PsiMethod.propagateParameterToSuperCallAndConstructorUsages() =
+        processConstructorUsages {
+            val superCall = body!!
+                .statements[0]
+                .cast<PsiExpressionStatement>()
+                .expression
+                .cast<PsiMethodCallExpression>()
+
+            superCall.argumentList.add(
+                setterParameter.factory.createExpressionFromText(
+                    setterParameter.name, this
+                )
+            )
+        }
 
     private fun PsiNewExpression.processConstructorCall() {
         val argumentList = argumentList!!
