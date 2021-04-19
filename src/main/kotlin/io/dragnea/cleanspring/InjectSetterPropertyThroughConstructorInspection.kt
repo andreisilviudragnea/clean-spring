@@ -152,41 +152,21 @@ private data class PropertyInjectionContext(
         }
 
     private fun PsiNewExpression.processConstructorCall() {
-        val argumentList = argumentList!!
-
         val psiVariable = getPsiVariable()
 
         if (psiVariable == null) {
-            val beanAnnotatedMethod = getBeanAnnotatedMethod()
-
-            if (beanAnnotatedMethod == null) {
-                argumentList.add(
-                    factory.createExpressionFromText(
-                        setterParameter.type.defaultValue,
-                        this
-                    )
-                )
-                return
-            }
-
-            beanAnnotatedMethod.addParameter()
-            argumentList.add(factory.createExpressionFromText(setterParameter.name, this))
+            processBeanMethodOrDefault()
             return
         }
 
         val setterArgument = psiVariable.getSetterArgument()
 
         if (setterArgument == null) {
-            argumentList.add(
-                factory.createExpressionFromText(
-                    setterParameter.type.defaultValue,
-                    this
-                )
-            )
+            processBeanMethodOrDefault()
             return
         }
 
-        argumentList.add(setterArgument)
+        argumentList!!.add(setterArgument)
 
         val setterStatement = setterArgument.parentOfType<PsiStatement>()!!
 
@@ -200,6 +180,24 @@ private data class PropertyInjectionContext(
         )
 
         constructorStatement.delete()
+    }
+
+    private fun PsiNewExpression.processBeanMethodOrDefault() {
+        val beanAnnotatedMethod = getBeanAnnotatedMethod()
+        val argumentList = argumentList!!
+
+        if (beanAnnotatedMethod == null) {
+            argumentList.add(
+                factory.createExpressionFromText(
+                    setterParameter.type.defaultValue,
+                    this
+                )
+            )
+            return
+        }
+
+        beanAnnotatedMethod.addParameter()
+        argumentList.add(factory.createExpressionFromText(setterParameter.name, this))
     }
 
     private fun PsiVariable.getSetterArgument(): PsiExpression? {
