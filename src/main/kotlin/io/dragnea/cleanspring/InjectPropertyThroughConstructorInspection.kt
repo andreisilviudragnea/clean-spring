@@ -19,6 +19,7 @@ import com.intellij.psi.PsiExpressionStatement
 import com.intellij.psi.PsiField
 import com.intellij.psi.PsiJavaCodeReferenceElement
 import com.intellij.psi.PsiKeyword
+import com.intellij.psi.PsiLocalVariable
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiMethodCallExpression
 import com.intellij.psi.PsiNewExpression
@@ -266,7 +267,7 @@ private data class PropertyInjectionContext(
 private fun PsiMethod.isCandidate() =
     hasAnnotation("org.springframework.beans.factory.annotation.Autowired") &&
         allUsagesAreRightAfterConstructorCall() &&
-        fieldIsAssignedOnlyOnce()
+        getField().getSoleAssignment() != null
 
 private fun PsiMethod.allUsagesAreRightAfterConstructorCall(): Boolean {
     return ReferencesSearch.search(this).map {
@@ -282,18 +283,50 @@ private fun PsiMethod.allUsagesAreRightAfterConstructorCall(): Boolean {
         val psiVariable =
             qualifierExpression.resolve().castSafelyTo<PsiVariable>() ?: return@map false
 
-        val block = psiVariable.parentOfType<PsiCodeBlock>() ?: return@map false
+        if (psiVariable is PsiLocalVariable) {
+            val block = psiVariable.parentOfType<PsiCodeBlock>() ?: return@map false
 
-        val statements = ReferencesSearch.search(psiVariable, LocalSearchScope(block)).mapNotNull {
-            it.element.parentOfType<PsiStatement>()
+            val statements =
+                ReferencesSearch.search(psiVariable, LocalSearchScope(block)).mapNotNull {
+                    it.element.parentOfType<PsiStatement>()
+                }
+
+            val setterStatement =
+                referenceExpression.parentOfType<PsiStatement>() ?: return@map false
+
+            val firstReferencedStatement =
+                block.statements.firstOrNull { it in statements } ?: return@map false
+
+            return firstReferencedStatement == setterStatement
         }
 
-        val setterStatement = referenceExpression.parentOfType<PsiStatement>() ?: return@map false
+        if (psiVariable is PsiField) {
+            val soleAssignment = psiVariable.getSoleAssignment() ?: return@map false
 
-        val firstReferencedStatement =
-            block.statements.firstOrNull { it in statements } ?: return@map false
+            val assignmentBlock = soleAssignment.parentOfType<PsiCodeBlock>() ?: return@map false
 
-        firstReferencedStatement == setterStatement
+            val setterCallBlock = referenceExpression.parentOfType<PsiCodeBlock>() ?: return@map false
+
+            assignmentBlock == setterCallBlock || return@map false
+
+            val soleAssignmentStatement = soleAssignment.parentOfType<PsiStatement>()
+
+            val statements =
+                ReferencesSearch
+                    .search(psiVariable, LocalSearchScope(setterCallBlock))
+                    .mapNotNull { it.element.parentOfType<PsiStatement>() }
+                    .filter { it != soleAssignmentStatement }
+
+            val setterStatement =
+                referenceExpression.parentOfType<PsiStatement>() ?: return@map false
+
+            val firstReferencedStatement =
+                setterCallBlock.statements.firstOrNull { it in statements } ?: return@map false
+
+            return firstReferencedStatement == setterStatement
+        }
+
+        false
     }.all { it }
 }
 
@@ -423,20 +456,26 @@ private fun PsiMethod.getField() = body!!
     .resolve()
     .cast<PsiField>()
 
-private fun PsiMethod.fieldIsAssignedOnlyOnce(): Boolean = ReferencesSearch
-    .search(getField())
-    .map {
-        if (it !is PsiReferenceExpression) return@map false
+private fun PsiField.getSoleAssignment(): PsiAssignmentExpression? {
+    val assignments = ReferencesSearch
+        .search(this)
+        .map {
+            if (it !is PsiReferenceExpression) return@map null
 
-        val parent = it.element.parent
+            val parent = it.element.parent
 
-        if (parent !is PsiAssignmentExpression) return@map false
+            if (parent !is PsiAssignmentExpression) return@map null
 
-        parent.lExpression == it || return@map false
+            parent.lExpression == it || return@map null
 
-        true
-    }
-    .count { it } == 1
+            parent
+        }
+        .filterNotNull()
+
+    if (assignments.size != 1) return null
+
+    return assignments[0]
+}
 
 private fun PsiMethod.returnsVoid() = returnType == PsiType.VOID
 
