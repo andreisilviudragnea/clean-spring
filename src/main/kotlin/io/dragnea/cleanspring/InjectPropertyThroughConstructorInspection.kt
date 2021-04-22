@@ -22,6 +22,7 @@ import com.intellij.psi.PsiKeyword
 import com.intellij.psi.PsiLocalVariable
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiMethodCallExpression
+import com.intellij.psi.PsiModifier
 import com.intellij.psi.PsiNewExpression
 import com.intellij.psi.PsiParameter
 import com.intellij.psi.PsiReference
@@ -89,6 +90,8 @@ class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspecti
                 field.getAnnotation(AUTOWIRED)?.delete()
                 field.getAnnotation(VALUE)?.delete()
                 field.getAnnotation(QUALIFIER)?.delete()
+
+                field.modifierList!!.setModifierProperty(PsiModifier.FINAL, true)
             }
         }
 
@@ -123,6 +126,8 @@ class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspecti
                     }
 
                 setterMethod.delete()
+
+                setterMethod.getField().modifierList!!.setModifierProperty(PsiModifier.FINAL, true)
             }
         }
 
