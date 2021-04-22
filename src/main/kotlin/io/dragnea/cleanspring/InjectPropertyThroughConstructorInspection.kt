@@ -45,13 +45,7 @@ class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspecti
     override fun buildVisitor(holder: ProblemsHolder, isOnTheFly: Boolean): PsiElementVisitor {
         return object : JavaElementVisitor() {
             override fun visitMethod(method: PsiMethod) {
-                method.setterParameter() ?: return
-
-                val containingClass = method.containingClass ?: return
-
-                if (containingClass.constructors.size > 1) return
-
-                if (!method.isCandidate()) return
+                method.isCandidate() || return
 
                 holder.registerProblem(
                     method.nameIdentifier!!,
@@ -264,70 +258,86 @@ private data class PropertyInjectionContext(
     }
 }
 
-private fun PsiMethod.isCandidate() =
-    hasAnnotation("org.springframework.beans.factory.annotation.Autowired") &&
-        allUsagesAreRightAfterConstructorCall() &&
-        getField().getSoleAssignment() != null
+private fun PsiMethod.isCandidate(): Boolean {
+    setterParameter() ?: return false
+
+    val containingClass = containingClass ?: return false
+
+    containingClass.constructors.size <= 1 || return false
+
+    hasAnnotation("org.springframework.beans.factory.annotation.Autowired") || return false
+
+    allUsagesAreRightAfterConstructorCall() || return false
+
+    getField().getSoleAssignment() ?: return false
+
+    return true
+}
 
 private fun PsiMethod.allUsagesAreRightAfterConstructorCall(): Boolean {
-    return ReferencesSearch.search(this).map {
-        it !is PropertyReference || return@map true
+    return ReferencesSearch
+        .search(this)
+        .map { it.isSetterCallRightAfterConstructorCall() }
+        .all { it }
+}
 
-        val referenceExpression =
-            it.element.castSafelyTo<PsiReferenceExpression>() ?: return@map false
+fun PsiReference.isSetterCallRightAfterConstructorCall(): Boolean {
+    this !is PropertyReference || return true
 
-        val qualifierExpression =
-            referenceExpression.qualifierExpression.castSafelyTo<PsiReferenceExpression>()
-                ?: return@map false
+    val referenceExpression =
+        element.castSafelyTo<PsiReferenceExpression>() ?: return false
 
-        val psiVariable =
-            qualifierExpression.resolve().castSafelyTo<PsiVariable>() ?: return@map false
+    val qualifierExpression =
+        referenceExpression.qualifierExpression.castSafelyTo<PsiReferenceExpression>()
+            ?: return false
 
-        if (psiVariable is PsiLocalVariable) {
-            val block = psiVariable.parentOfType<PsiCodeBlock>() ?: return@map false
+    val psiVariable =
+        qualifierExpression.resolve().castSafelyTo<PsiVariable>() ?: return false
 
-            val statements =
-                ReferencesSearch.search(psiVariable, LocalSearchScope(block)).mapNotNull {
-                    it.element.parentOfType<PsiStatement>()
-                }
+    if (psiVariable is PsiLocalVariable) {
+        val block = psiVariable.parentOfType<PsiCodeBlock>() ?: return false
 
-            val setterStatement =
-                referenceExpression.parentOfType<PsiStatement>() ?: return@map false
+        val statements =
+            ReferencesSearch.search(psiVariable, LocalSearchScope(block)).mapNotNull {
+                it.element.parentOfType<PsiStatement>()
+            }
 
-            val firstReferencedStatement =
-                block.statements.firstOrNull { it in statements } ?: return@map false
+        val setterStatement =
+            referenceExpression.parentOfType<PsiStatement>() ?: return false
 
-            return firstReferencedStatement == setterStatement
-        }
+        val firstReferencedStatement =
+            block.statements.firstOrNull { it in statements } ?: return false
 
-        if (psiVariable is PsiField) {
-            val soleAssignment = psiVariable.getSoleAssignment() ?: return@map false
+        return firstReferencedStatement == setterStatement
+    }
 
-            val assignmentBlock = soleAssignment.parentOfType<PsiCodeBlock>() ?: return@map false
+    if (psiVariable is PsiField) {
+        val soleAssignment = psiVariable.getSoleAssignment() ?: return false
 
-            val setterCallBlock = referenceExpression.parentOfType<PsiCodeBlock>() ?: return@map false
+        val assignmentBlock = soleAssignment.parentOfType<PsiCodeBlock>() ?: return false
 
-            assignmentBlock == setterCallBlock || return@map false
+        val setterCallBlock = referenceExpression.parentOfType<PsiCodeBlock>() ?: return false
 
-            val soleAssignmentStatement = soleAssignment.parentOfType<PsiStatement>()
+        assignmentBlock == setterCallBlock || return false
 
-            val statements =
-                ReferencesSearch
-                    .search(psiVariable, LocalSearchScope(setterCallBlock))
-                    .mapNotNull { it.element.parentOfType<PsiStatement>() }
-                    .filter { it != soleAssignmentStatement }
+        val soleAssignmentStatement = soleAssignment.parentOfType<PsiStatement>()
 
-            val setterStatement =
-                referenceExpression.parentOfType<PsiStatement>() ?: return@map false
+        val statements =
+            ReferencesSearch
+                .search(psiVariable, LocalSearchScope(setterCallBlock))
+                .mapNotNull { it.element.parentOfType<PsiStatement>() }
+                .filter { it != soleAssignmentStatement }
 
-            val firstReferencedStatement =
-                setterCallBlock.statements.firstOrNull { it in statements } ?: return@map false
+        val setterStatement =
+            referenceExpression.parentOfType<PsiStatement>() ?: return false
 
-            return firstReferencedStatement == setterStatement
-        }
+        val firstReferencedStatement =
+            setterCallBlock.statements.firstOrNull { it in statements } ?: return false
 
-        false
-    }.all { it }
+        return firstReferencedStatement == setterStatement
+    }
+
+    return false
 }
 
 private fun PsiNewExpression.getBeanAnnotatedMethod(): PsiMethod? {
