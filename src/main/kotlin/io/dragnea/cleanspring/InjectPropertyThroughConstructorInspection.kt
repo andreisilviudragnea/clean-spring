@@ -34,16 +34,15 @@ import com.intellij.psi.search.LocalSearchScope
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.psi.util.parentOfType
 import com.intellij.psi.xml.XmlTag
+import com.intellij.spring.constants.SpringAnnotationsConstants.AUTOWIRED
+import com.intellij.spring.constants.SpringAnnotationsConstants.QUALIFIER
+import com.intellij.spring.constants.SpringAnnotationsConstants.VALUE
 import com.intellij.spring.model.properties.PropertyReference
 import com.intellij.util.castSafelyTo
 import org.jetbrains.kotlin.idea.util.application.runWriteAction
 import org.jetbrains.kotlin.j2k.getContainingClass
 import org.jetbrains.kotlin.j2k.getContainingMethod
 import org.jetbrains.kotlin.utils.addToStdlib.cast
-
-const val AUTOWIRED_ANNOTATION = "org.springframework.beans.factory.annotation.Autowired"
-const val VALUE_ANNOTATION = "org.springframework.beans.factory.annotation.Value"
-const val QUALIFIER_ANNOTATION = "org.springframework.beans.factory.annotation.Qualifier"
 
 class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspectionTool() {
     override fun buildVisitor(holder: ProblemsHolder, isOnTheFly: Boolean): PsiElementVisitor {
@@ -87,9 +86,9 @@ class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspecti
                     }
                 }
 
-                field.getAnnotation(AUTOWIRED_ANNOTATION)?.delete()
-                field.getAnnotation(VALUE_ANNOTATION)?.delete()
-                field.getAnnotation(QUALIFIER_ANNOTATION)?.delete()
+                field.getAnnotation(AUTOWIRED)?.delete()
+                field.getAnnotation(VALUE)?.delete()
+                field.getAnnotation(QUALIFIER)?.delete()
             }
         }
 
@@ -282,15 +281,15 @@ private data class PropertyInjectionContext(
 
         property
             .getContainingMethod()
-            ?.getAnnotation(QUALIFIER_ANNOTATION)
+            ?.getAnnotation(QUALIFIER)
             ?.let { modifierList.add(it) }
 
         property
-            .getAnnotation(QUALIFIER_ANNOTATION)
+            .getAnnotation(QUALIFIER)
             ?.let { modifierList.add(it) }
 
         property
-            .getAnnotation(VALUE_ANNOTATION)
+            .getAnnotation(VALUE)
             ?.let { modifierList.add(it) }
     }
 }
@@ -302,7 +301,7 @@ private fun PsiMethod.isCandidate(): Boolean {
 
     containingClass.constructors.size <= 1 || return false
 
-    hasAnnotation(AUTOWIRED_ANNOTATION) || return false
+    hasAnnotation(AUTOWIRED) || return false
 
     allUsagesAreRightAfterConstructorCall() || return false
 
@@ -312,7 +311,7 @@ private fun PsiMethod.isCandidate(): Boolean {
 }
 
 private fun PsiField.isCandidate(): Boolean {
-    hasAnnotation(AUTOWIRED_ANNOTATION) || hasAnnotation(VALUE_ANNOTATION) || return false
+    hasAnnotation(AUTOWIRED) || hasAnnotation(VALUE) || return false
 
     assignmentExpressions().isEmpty() || return false
 
