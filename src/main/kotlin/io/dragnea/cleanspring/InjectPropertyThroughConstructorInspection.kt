@@ -41,6 +41,10 @@ import org.jetbrains.kotlin.j2k.getContainingClass
 import org.jetbrains.kotlin.j2k.getContainingMethod
 import org.jetbrains.kotlin.utils.addToStdlib.cast
 
+const val AUTOWIRED_ANNOTATION = "org.springframework.beans.factory.annotation.Autowired"
+const val VALUE_ANNOTATION = "org.springframework.beans.factory.annotation.Value"
+const val QUALIFIER_ANNOTATION = "org.springframework.beans.factory.annotation.Qualifier"
+
 class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspectionTool() {
     override fun buildVisitor(holder: ProblemsHolder, isOnTheFly: Boolean): PsiElementVisitor {
         return object : JavaElementVisitor() {
@@ -83,9 +87,9 @@ class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspecti
                     }
                 }
 
-                field
-                    .getAnnotation("org.springframework.beans.factory.annotation.Autowired")!!
-                    .delete()
+                field.getAnnotation(AUTOWIRED_ANNOTATION)?.delete()
+                field.getAnnotation(VALUE_ANNOTATION)?.delete()
+                field.getAnnotation(QUALIFIER_ANNOTATION)?.delete()
             }
         }
 
@@ -276,25 +280,18 @@ private data class PropertyInjectionContext(
 
         val modifierList = parameter.modifierList!!
 
-        val qualifierSetterAnnotation = property
+        property
             .getContainingMethod()
-            ?.getAnnotation("org.springframework.beans.factory.annotation.Qualifier")
-        if (qualifierSetterAnnotation != null) {
-            modifierList.add(qualifierSetterAnnotation)
-        }
+            ?.getAnnotation(QUALIFIER_ANNOTATION)
+            ?.let { modifierList.add(it) }
 
-        val qualifierParameterAnnotation = property
-            .getAnnotation("org.springframework.beans.factory.annotation.Qualifier")
-        if (qualifierParameterAnnotation != null) {
-            modifierList.add(qualifierParameterAnnotation)
-        }
+        property
+            .getAnnotation(QUALIFIER_ANNOTATION)
+            ?.let { modifierList.add(it) }
 
-        val valueAnnotation =
-            property.getAnnotation("org.springframework.beans.factory.annotation.Value")
-
-        if (valueAnnotation != null) {
-            modifierList.add(valueAnnotation)
-        }
+        property
+            .getAnnotation(VALUE_ANNOTATION)
+            ?.let { modifierList.add(it) }
     }
 }
 
@@ -305,7 +302,7 @@ private fun PsiMethod.isCandidate(): Boolean {
 
     containingClass.constructors.size <= 1 || return false
 
-    hasAnnotation("org.springframework.beans.factory.annotation.Autowired") || return false
+    hasAnnotation(AUTOWIRED_ANNOTATION) || return false
 
     allUsagesAreRightAfterConstructorCall() || return false
 
@@ -315,7 +312,7 @@ private fun PsiMethod.isCandidate(): Boolean {
 }
 
 private fun PsiField.isCandidate(): Boolean {
-    hasAnnotation("org.springframework.beans.factory.annotation.Autowired") || return false
+    hasAnnotation(AUTOWIRED_ANNOTATION) || hasAnnotation(VALUE_ANNOTATION) || return false
 
     assignmentExpressions().isEmpty() || return false
 
