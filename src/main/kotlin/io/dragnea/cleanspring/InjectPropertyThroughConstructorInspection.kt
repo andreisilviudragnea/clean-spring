@@ -74,7 +74,19 @@ class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspecti
         override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
             val field = descriptor.psiElement.parentOfType<PsiField>()!!
 
-            field.containingClass!!.getNormalizedConstructor()
+            runWriteAction {
+                PropertyInjectionContext(field).apply {
+                    field.containingClass!!.getNormalizedConstructor().processConstructorUsagesForField {
+                        body?.add(factory.createStatementFromText(
+                            "this.${field.name} = ${field.name};", body
+                        ))
+                    }
+                }
+
+                field
+                    .getAnnotation("org.springframework.beans.factory.annotation.Autowired")!!
+                    .delete()
+            }
         }
 
         override fun startInWriteAction() = false
@@ -92,7 +104,7 @@ class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspecti
 
             runWriteAction {
                 PropertyInjectionContext(setterParameter).apply {
-                    setterClass.getNormalizedConstructor().processConstructorUsages {
+                    setterClass.getNormalizedConstructor().processConstructorUsagesForSetter {
                         body?.add(setterParameter.getContainingMethod()!!.body!!.statements[0])
                     }
                 }
@@ -116,9 +128,16 @@ class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspecti
 }
 
 private data class PropertyInjectionContext(
-    val setterParameter: PsiVariable
+    val property: PsiVariable
 ) {
-    fun PsiMethod.processConstructorUsages(bodyTransformer: PsiMethod.() -> Unit) {
+    fun PsiMethod.processConstructorUsagesForSetter(bodyTransformer: PsiMethod.() -> Unit) =
+        processConstructorUsages(bodyTransformer) { processConstructorCall() }
+
+    fun PsiMethod.processConstructorUsagesForField(bodyTransformer: PsiMethod.() -> Unit) =
+        processConstructorUsages(bodyTransformer) { processBeanMethodOrDefault() }
+
+    private fun PsiMethod.processConstructorUsages(bodyTransformer: PsiMethod.() -> Unit,
+                                                   newExpressionProcessor: PsiNewExpression.() -> Unit) {
         val query = ReferencesSearch.search(this).findAll()
 
         addParameter()
@@ -142,7 +161,7 @@ private data class PropertyInjectionContext(
                 }
                 else -> {
                     when (val parent = reference.parent) {
-                        is PsiNewExpression -> parent.processConstructorCall()
+                        is PsiNewExpression -> parent.newExpressionProcessor()
                         is PsiMethodCallExpression -> {
                             if (reference.text == "super") {
                                 reference
@@ -157,7 +176,7 @@ private data class PropertyInjectionContext(
     }
 
     private fun PsiMethod.propagateParameterToSuperCallAndConstructorUsages() =
-        processConstructorUsages {
+        processConstructorUsagesForSetter {
             val superCall = body!!
                 .statements[0]
                 .cast<PsiExpressionStatement>()
@@ -165,9 +184,7 @@ private data class PropertyInjectionContext(
                 .cast<PsiMethodCallExpression>()
 
             superCall.argumentList.add(
-                setterParameter.factory.createExpressionFromText(
-                    setterParameter.name!!, this
-                )
+                property.factory.createExpressionFromText(property.name!!, this)
             )
         }
 
@@ -209,7 +226,7 @@ private data class PropertyInjectionContext(
         if (beanAnnotatedMethod == null) {
             argumentList.add(
                 factory.createExpressionFromText(
-                    setterParameter.type.defaultValue,
+                    property.type.defaultValue,
                     this
                 )
             )
@@ -217,7 +234,7 @@ private data class PropertyInjectionContext(
         }
 
         beanAnnotatedMethod.addParameter()
-        argumentList.add(factory.createExpressionFromText(setterParameter.name!!, this))
+        argumentList.add(factory.createExpressionFromText(property.name!!, this))
     }
 
     private fun PsiVariable.getSetterArgument(): PsiExpression? {
@@ -243,7 +260,7 @@ private data class PropertyInjectionContext(
 
         val method = methodCallExpression.resolveMethod() ?: return null
 
-        if (method.setterParameter() != setterParameter) return null
+        if (method.setterParameter() != property) return null
 
         return methodCallExpression.argumentList.expressions[0]
     }
@@ -254,26 +271,26 @@ private data class PropertyInjectionContext(
         }
 
         val parameter = parameterList
-            .add(factory.createParameter(setterParameter.name!!, setterParameter.type))
+            .add(factory.createParameter(property.name!!, property.type))
             .cast<PsiParameter>()
 
         val modifierList = parameter.modifierList!!
 
-        val qualifierSetterAnnotation = setterParameter
-            .getContainingMethod()!!
-            .getAnnotation("org.springframework.beans.factory.annotation.Qualifier")
+        val qualifierSetterAnnotation = property
+            .getContainingMethod()
+            ?.getAnnotation("org.springframework.beans.factory.annotation.Qualifier")
         if (qualifierSetterAnnotation != null) {
             modifierList.add(qualifierSetterAnnotation)
         }
 
-        val qualifierParameterAnnotation = setterParameter
+        val qualifierParameterAnnotation = property
             .getAnnotation("org.springframework.beans.factory.annotation.Qualifier")
         if (qualifierParameterAnnotation != null) {
             modifierList.add(qualifierParameterAnnotation)
         }
 
         val valueAnnotation =
-            setterParameter.getAnnotation("org.springframework.beans.factory.annotation.Value")
+            property.getAnnotation("org.springframework.beans.factory.annotation.Value")
 
         if (valueAnnotation != null) {
             modifierList.add(valueAnnotation)
