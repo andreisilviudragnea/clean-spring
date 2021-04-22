@@ -53,7 +53,7 @@ class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspecti
 
                 holder.registerProblem(
                     field.nameIdentifier,
-                    "Property can be injected through constructor",
+                    "Field property can be injected through constructor",
                     ProblemHighlightType.WARNING,
                     FieldFix()
                 )
@@ -64,7 +64,7 @@ class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspecti
 
                 holder.registerProblem(
                     method.nameIdentifier!!,
-                    "Property can be injected through constructor",
+                    "Setter property can be injected through constructor",
                     ProblemHighlightType.WARNING,
                     MethodFix()
                 )
@@ -73,7 +73,7 @@ class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspecti
     }
 
     class FieldFix : LocalQuickFix {
-        override fun getFamilyName() = "Inject property through constructor"
+        override fun getFamilyName() = "Inject field property through constructor"
 
         override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
             val field = descriptor.psiElement.parentOfType<PsiField>()!!
@@ -99,7 +99,7 @@ class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspecti
     }
 
     class MethodFix : LocalQuickFix {
-        override fun getFamilyName() = "Inject property through constructor"
+        override fun getFamilyName() = "Inject setter property through constructor"
 
         override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
             val setterMethod = descriptor.psiElement.parentOfType<PsiMethod>()!!
