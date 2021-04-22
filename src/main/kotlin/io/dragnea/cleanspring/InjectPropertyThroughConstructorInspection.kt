@@ -44,6 +44,17 @@ import org.jetbrains.kotlin.utils.addToStdlib.cast
 class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspectionTool() {
     override fun buildVisitor(holder: ProblemsHolder, isOnTheFly: Boolean): PsiElementVisitor {
         return object : JavaElementVisitor() {
+            override fun visitField(field: PsiField) {
+                field.isCandidate() || return
+
+                holder.registerProblem(
+                    field.nameIdentifier,
+                    "Property can be injected through constructor",
+                    ProblemHighlightType.WARNING,
+                    FieldFix()
+                )
+            }
+
             override fun visitMethod(method: PsiMethod) {
                 method.isCandidate() || return
 
@@ -51,14 +62,26 @@ class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspecti
                     method.nameIdentifier!!,
                     "Property can be injected through constructor",
                     ProblemHighlightType.WARNING,
-                    Fix()
+                    MethodFix()
                 )
             }
         }
     }
 
-    class Fix : LocalQuickFix {
-        override fun getFamilyName() = "Inject setter property through constructor"
+    class FieldFix : LocalQuickFix {
+        override fun getFamilyName() = "Inject property through constructor"
+
+        override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
+            val field = descriptor.psiElement.parentOfType<PsiField>()!!
+
+            field.containingClass!!.getNormalizedConstructor()
+        }
+
+        override fun startInWriteAction() = false
+    }
+
+    class MethodFix : LocalQuickFix {
+        override fun getFamilyName() = "Inject property through constructor"
 
         override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
             val setterMethod = descriptor.psiElement.parentOfType<PsiMethod>()!!
@@ -93,14 +116,14 @@ class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspecti
 }
 
 private data class PropertyInjectionContext(
-    val setterParameter: PsiParameter
+    val setterParameter: PsiVariable
 ) {
-    fun PsiMethod.processConstructorUsages(block: PsiMethod.() -> Unit) {
+    fun PsiMethod.processConstructorUsages(bodyTransformer: PsiMethod.() -> Unit) {
         val query = ReferencesSearch.search(this).findAll()
 
         addParameter()
 
-        block()
+        bodyTransformer()
 
         query.forEach {
             val reference = it.castSafelyTo<PsiJavaCodeReferenceElement>() ?: return@forEach
@@ -143,7 +166,7 @@ private data class PropertyInjectionContext(
 
             superCall.argumentList.add(
                 setterParameter.factory.createExpressionFromText(
-                    setterParameter.name, this
+                    setterParameter.name!!, this
                 )
             )
         }
@@ -194,7 +217,7 @@ private data class PropertyInjectionContext(
         }
 
         beanAnnotatedMethod.addParameter()
-        argumentList.add(factory.createExpressionFromText(setterParameter.name, this))
+        argumentList.add(factory.createExpressionFromText(setterParameter.name!!, this))
     }
 
     private fun PsiVariable.getSetterArgument(): PsiExpression? {
@@ -231,7 +254,7 @@ private data class PropertyInjectionContext(
         }
 
         val parameter = parameterList
-            .add(factory.createParameter(setterParameter.name, setterParameter.type))
+            .add(factory.createParameter(setterParameter.name!!, setterParameter.type))
             .cast<PsiParameter>()
 
         val modifierList = parameter.modifierList!!
@@ -273,6 +296,19 @@ private fun PsiMethod.isCandidate(): Boolean {
 
     return true
 }
+
+private fun PsiField.isCandidate(): Boolean {
+    hasAnnotation("org.springframework.beans.factory.annotation.Autowired") || return false
+
+    assignmentExpressions().isEmpty() || return false
+
+    !isInsideSpringTestContextClass() || return false
+
+    return true
+}
+
+private fun PsiField.isInsideSpringTestContextClass(): Boolean = containingClass!!
+    .hasAnnotation("org.springframework.test.context.ContextConfiguration")
 
 private fun PsiMethod.allUsagesAreRightAfterConstructorCall(): Boolean {
     return ReferencesSearch
@@ -467,24 +503,27 @@ private fun PsiMethod.getField() = body!!
     .cast<PsiField>()
 
 private fun PsiField.getSoleAssignment(): PsiAssignmentExpression? {
-    val assignments = ReferencesSearch
-        .search(this)
-        .map {
-            if (it !is PsiReferenceExpression) return@map null
-
-            val parent = it.element.parent
-
-            if (parent !is PsiAssignmentExpression) return@map null
-
-            parent.lExpression == it || return@map null
-
-            parent
-        }
-        .filterNotNull()
+    val assignments = assignmentExpressions()
 
     if (assignments.size != 1) return null
 
     return assignments[0]
+}
+
+private fun PsiField.assignmentExpressions() = ReferencesSearch
+    .search(this)
+    .mapNotNull { it.asAssignmentExpression() }
+
+private fun PsiReference.asAssignmentExpression(): PsiAssignmentExpression? {
+    if (this !is PsiReferenceExpression) return null
+
+    val parent = element.parent
+
+    if (parent !is PsiAssignmentExpression) return null
+
+    parent.lExpression == this || return null
+
+    return parent
 }
 
 private fun PsiMethod.returnsVoid() = returnType == PsiType.VOID
