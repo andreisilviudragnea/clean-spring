@@ -19,6 +19,7 @@ import com.intellij.psi.PsiExpression
 import com.intellij.psi.PsiExpressionStatement
 import com.intellij.psi.PsiField
 import com.intellij.psi.PsiJavaCodeReferenceElement
+import com.intellij.psi.PsiKeyword
 import com.intellij.psi.PsiLocalVariable
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiMethodCallExpression
@@ -187,13 +188,7 @@ private data class PropertyInjectionContext(
 
     private fun PsiMethod.propagateParameterToSuperCallAndConstructorUsages() =
         processConstructorUsagesForSetter {
-            val superCall = body!!
-                .statements[0]
-                .cast<PsiExpressionStatement>()
-                .expression
-                .cast<PsiMethodCallExpression>()
-
-            superCall.argumentList.add(
+            getSuperCall().argumentList.add(
                 property.factory.createExpressionFromText(property.name!!, this)
             )
         }
@@ -508,6 +503,41 @@ private fun PropertyReference.processXmlPropertyReference() {
 }
 
 private val PsiElement.factory get() = PsiElementFactory.getInstance(project)
+
+private fun PsiMethod.getSuperCall(): PsiMethodCallExpression {
+    val body = body!!
+
+    val statements = body.statements
+    val superCall = factory.createStatementFromText("super();", this)
+
+    if (statements.isEmpty()) {
+        return body
+            .add(superCall)
+            .cast<PsiExpressionStatement>()
+            .expression
+            .cast()
+    }
+
+    val firstStatement = statements[0]
+
+    return firstStatement.asSuperCall() ?: body
+        .addBefore(superCall, firstStatement)
+        .cast<PsiExpressionStatement>()
+        .expression
+        .cast()
+}
+
+private fun PsiStatement.asSuperCall(): PsiMethodCallExpression? {
+    if (this !is PsiExpressionStatement) return null
+
+    val expression = expression
+
+    if (expression !is PsiMethodCallExpression) return null
+
+    expression.methodExpression.referenceName == PsiKeyword.SUPER || return null
+
+    return expression
+}
 
 private fun PsiClass.getOrCreateConstructor(): PsiMethod = if (constructors.isEmpty()) {
     addDefaultConstructor()
