@@ -19,7 +19,6 @@ import com.intellij.psi.PsiExpression
 import com.intellij.psi.PsiExpressionStatement
 import com.intellij.psi.PsiField
 import com.intellij.psi.PsiJavaCodeReferenceElement
-import com.intellij.psi.PsiKeyword
 import com.intellij.psi.PsiLocalVariable
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiMethodCallExpression
@@ -82,11 +81,14 @@ class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspecti
 
             runWriteAction {
                 PropertyInjectionContext(field).apply {
-                    field.containingClass!!.getNormalizedConstructor().processConstructorUsagesForField {
-                        body?.add(factory.createStatementFromText(
-                            "this.${field.name} = ${field.name};", body
-                        ))
-                    }
+                    field.containingClass!!.getOrCreateConstructor()
+                        .processConstructorUsagesForField {
+                            body?.add(
+                                factory.createStatementFromText(
+                                    "this.${field.name} = ${field.name};", body
+                                )
+                            )
+                        }
                 }
 
                 field.getAnnotation(AUTOWIRED)?.delete()
@@ -113,12 +115,10 @@ class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspecti
 
             runWriteAction {
                 PropertyInjectionContext(setterParameter).apply {
-                    setterClass.getNormalizedConstructor().processConstructorUsagesForSetter {
+                    setterClass.getOrCreateConstructor().processConstructorUsagesForSetter {
                         body?.add(setterParameter.getContainingMethod()!!.body!!.statements[0])
                     }
                 }
-
-                // TODO: Clean redundant super() calls
 
                 ReferencesSearch
                     .search(setterMethod)
@@ -129,7 +129,6 @@ class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspecti
                     }
 
                 setterMethod.delete()
-
                 setterMethod.getField().modifierList!!.setModifierProperty(PsiModifier.FINAL, true)
             }
         }
@@ -161,13 +160,13 @@ private data class PropertyInjectionContext(
             when (val element = reference.element) {
                 is PsiClass -> {
                     element
-                        .getNormalizedConstructor()
+                        .getOrCreateConstructor()
                         .propagateParameterToSuperCallAndConstructorUsages()
                 }
                 is PsiMethod -> {
                     element
                         .containingClass!!
-                        .getNormalizedConstructor()
+                        .getOrCreateConstructor()
                         .propagateParameterToSuperCallAndConstructorUsages()
                 }
                 else -> {
@@ -244,8 +243,11 @@ private data class PropertyInjectionContext(
             return
         }
 
-        beanAnnotatedMethod.addParameter()
-        argumentList.add(factory.createExpressionFromText(property.name!!, this))
+        val name = property.name!!
+        if (beanAnnotatedMethod.parameterList.parameters.none { it.name == name }) {
+            beanAnnotatedMethod.addParameter()
+        }
+        argumentList.add(factory.createExpressionFromText(name, this))
     }
 
     private fun PsiVariable.getSetterArgument(): PsiExpression? {
@@ -507,38 +509,6 @@ private fun PropertyReference.processXmlPropertyReference() {
 
 private val PsiElement.factory get() = PsiElementFactory.getInstance(project)
 
-private fun PsiClass.getNormalizedConstructor(): PsiMethod {
-    val constructor = getOrCreateConstructor()
-
-    val body = constructor.body ?: return constructor
-
-    val statements = body.statements
-
-    val superCall = factory.createStatementFromText("super();", this)
-
-    if (statements.isEmpty()) {
-        body.add(superCall)
-        return constructor
-    }
-
-    val firstStatement = statements[0]
-    if (!firstStatement.isSuperCall()) {
-        body.addBefore(superCall, firstStatement)
-    }
-
-    return constructor
-}
-
-private fun PsiStatement.isSuperCall(): Boolean {
-    if (this !is PsiExpressionStatement) return false
-
-    val expression = expression
-
-    if (expression !is PsiMethodCallExpression) return false
-
-    return expression.methodExpression.referenceName == PsiKeyword.SUPER
-}
-
 private fun PsiClass.getOrCreateConstructor(): PsiMethod = if (constructors.isEmpty()) {
     addDefaultConstructor()
 } else {
@@ -547,7 +517,7 @@ private fun PsiClass.getOrCreateConstructor(): PsiMethod = if (constructors.isEm
 
 private fun PsiClass.addDefaultConstructor(): PsiMethod {
     val defaultConstructor = factory.createMethodFromText(
-        "public $name() {\nsuper();\n}",
+        "public $name() {}",
         this
     )
 
