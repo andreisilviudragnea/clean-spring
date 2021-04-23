@@ -327,7 +327,16 @@ private fun PsiField.isCandidate(): Boolean {
 
     when (containingClass.constructors.size) {
         0 -> containingClass.noUsageIsFromInjectedBeanMethods() || return false
-        1 -> containingClass.constructors[0].noUsageIsFromInjectedBeanMethods() || return false
+        1 -> {
+            val constructor = containingClass.constructors[0]
+
+            val parameters = constructor.parameterList.parameters
+            if (parameters.isNotEmpty()) {
+                !parameters.last().isVarArgs || return false
+            }
+
+            constructor.noUsageIsFromInjectedBeanMethods() || return false
+        }
         else -> return false
     }
 
