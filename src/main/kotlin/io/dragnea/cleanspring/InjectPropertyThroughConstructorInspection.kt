@@ -92,6 +92,7 @@ class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspecti
                 field.getAnnotation(VALUE)?.delete()
                 field.getAnnotation(QUALIFIER)?.delete()
 
+                field.initializer?.delete()
                 field.modifierList!!.setModifierProperty(PsiModifier.FINAL, true)
             }
         }
