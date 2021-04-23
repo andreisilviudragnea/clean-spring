@@ -326,8 +326,8 @@ private fun PsiField.isCandidate(): Boolean {
     !containingClass.isTestNgSpringTestContextClass() || return false
 
     when (containingClass.constructors.size) {
-        0 -> containingClass.allUsagesAreNotFromBeanMethodsUsedForInjection() || return false
-        1 -> containingClass.constructors[0].allUsagesAreNotFromBeanMethodsUsedForInjection() || return false
+        0 -> containingClass.noUsageIsFromInjectedBeanMethods() || return false
+        1 -> containingClass.constructors[0].noUsageIsFromInjectedBeanMethods() || return false
         else -> return false
     }
 
@@ -353,24 +353,24 @@ private fun PsiMethod.allUsagesAreRightAfterConstructorCall(): Boolean = Referen
     .map { it.isSetterCallRightAfterConstructorCall() }
     .all { it }
 
-private fun PsiElement.allUsagesAreNotFromBeanMethodsUsedForInjection(): Boolean = ReferencesSearch
+private fun PsiElement.noUsageIsFromInjectedBeanMethods(): Boolean = ReferencesSearch
     .search(this)
-    .map { it.isNewExpressionInsideBeanMethodUsedForInjection() }
+    .map { it.isNewExpressionInsideInjectedBeanMethod() }
     .none { it }
 
-private fun PsiReference.isNewExpressionInsideBeanMethodUsedForInjection(): Boolean {
+private fun PsiReference.isNewExpressionInsideInjectedBeanMethod(): Boolean {
     val reference = castSafelyTo<PsiJavaCodeReferenceElement>() ?: return false
 
     val newExpression = reference.element.parent.castSafelyTo<PsiNewExpression>() ?: return false
 
     val method = newExpression.parentOfType<PsiMethod>() ?: return false
 
-    return method.isBeanMethodUsedForInjection()
+    return method.isInjectedBeanMethod()
 }
 
 private fun PsiMethod.isBeanMethod() = hasAnnotation(SpringAnnotationsConstants.JAVA_SPRING_BEAN)
 
-private fun PsiMethod.isBeanMethodUsedForInjection(): Boolean {
+private fun PsiMethod.isInjectedBeanMethod(): Boolean {
     isBeanMethod() || return false
 
     return ReferencesSearch
