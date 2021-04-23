@@ -398,9 +398,9 @@ private fun PsiReference.isMethodCallInsideBeanMethod(): Boolean {
     val methodCall =
         reference.element.parentOfType<PsiMethodCallExpression>() ?: return false
 
-    val method = methodCall.parentOfType<PsiMethod>() ?: return false
+    methodCall.parentOfType<PsiMethod>() ?: return false
 
-    return method.isBeanMethod()
+    return true
 }
 
 fun PsiReference.isSetterCallRightAfterConstructorCall(): Boolean {
