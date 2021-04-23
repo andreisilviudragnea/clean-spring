@@ -329,6 +329,8 @@ private fun PsiField.isCandidate(): Boolean {
 
     !containingClass.isTestNgSpringTestContextClass() || return false
 
+    !hasFieldWithSameNameInParentClass() || return false
+
     when (containingClass.constructors.size) {
         0 -> containingClass.noUsageIsFromCalledBeanMethods() || return false
         1 -> {
@@ -345,6 +347,19 @@ private fun PsiField.isCandidate(): Boolean {
     }
 
     return true
+}
+
+private fun PsiField.hasFieldWithSameNameInParentClass(): Boolean {
+    val name = name
+    var currentClass = containingClass!!.superClass
+
+    while (true) {
+        if (currentClass == null) return false
+
+        currentClass.fields.firstOrNull { it.name == name } == null || return true
+
+        currentClass = currentClass.superClass
+    }
 }
 
 private fun PsiClass.isTestNgSpringTestContextClass(): Boolean {
