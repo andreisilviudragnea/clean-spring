@@ -7,6 +7,7 @@ import com.intellij.codeInspection.ProblemHighlightType
 import com.intellij.codeInspection.ProblemsHolder
 import com.intellij.openapi.project.Project
 import com.intellij.psi.JavaElementVisitor
+import com.intellij.psi.PsiAnonymousClass
 import com.intellij.psi.PsiAssignmentExpression
 import com.intellij.psi.PsiBlockStatement
 import com.intellij.psi.PsiClass
@@ -323,6 +324,8 @@ private fun PsiField.isCandidate(): Boolean {
     assignmentExpressions().isEmpty() || return false
 
     val containingClass = containingClass ?: return false
+
+    containingClass !is PsiAnonymousClass || return false
 
     !containingClass.isTestNgSpringTestContextClass() || return false
 
