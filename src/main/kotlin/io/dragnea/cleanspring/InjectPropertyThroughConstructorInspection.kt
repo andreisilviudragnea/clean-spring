@@ -330,7 +330,7 @@ private fun PsiField.isCandidate(): Boolean {
     !containingClass.isTestNgSpringTestContextClass() || return false
 
     when (containingClass.constructors.size) {
-        0 -> containingClass.noUsageIsFromInjectedBeanMethods() || return false
+        0 -> containingClass.noUsageIsFromCalledBeanMethods() || return false
         1 -> {
             val constructor = containingClass.constructors[0]
 
@@ -339,7 +339,7 @@ private fun PsiField.isCandidate(): Boolean {
                 !parameters.last().isVarArgs || return false
             }
 
-            constructor.noUsageIsFromInjectedBeanMethods() || return false
+            constructor.noUsageIsFromCalledBeanMethods() || return false
         }
         else -> return false
     }
@@ -366,33 +366,33 @@ private fun PsiMethod.allUsagesAreRightAfterConstructorCall(): Boolean = Referen
     .map { it.isSetterCallRightAfterConstructorCall() }
     .all { it }
 
-private fun PsiElement.noUsageIsFromInjectedBeanMethods(): Boolean = ReferencesSearch
+private fun PsiElement.noUsageIsFromCalledBeanMethods(): Boolean = ReferencesSearch
     .search(this)
-    .map { it.isNewExpressionInsideInjectedBeanMethod() }
+    .map { it.isNewExpressionInsideCalledBeanMethod() }
     .none { it }
 
-private fun PsiReference.isNewExpressionInsideInjectedBeanMethod(): Boolean {
+private fun PsiReference.isNewExpressionInsideCalledBeanMethod(): Boolean {
     val reference = castSafelyTo<PsiJavaCodeReferenceElement>() ?: return false
 
     val newExpression = reference.element.parent.castSafelyTo<PsiNewExpression>() ?: return false
 
     val method = newExpression.parentOfType<PsiMethod>() ?: return false
 
-    return method.isInjectedBeanMethod()
+    return method.isCalledBeanMethod()
 }
 
 private fun PsiMethod.isBeanMethod() = hasAnnotation(SpringAnnotationsConstants.JAVA_SPRING_BEAN)
 
-private fun PsiMethod.isInjectedBeanMethod(): Boolean {
+private fun PsiMethod.isCalledBeanMethod(): Boolean {
     isBeanMethod() || return false
 
     return ReferencesSearch
         .search(this)
-        .map { it.isMethodCallInsideBeanMethod() }
+        .map { it.isMethodCall() }
         .any { it }
 }
 
-private fun PsiReference.isMethodCallInsideBeanMethod(): Boolean {
+private fun PsiReference.isMethodCall(): Boolean {
     val reference = castSafelyTo<PsiJavaCodeReferenceElement>() ?: return false
 
     val methodCall =
