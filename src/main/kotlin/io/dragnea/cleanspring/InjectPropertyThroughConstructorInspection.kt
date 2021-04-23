@@ -35,6 +35,7 @@ import com.intellij.psi.search.LocalSearchScope
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.psi.util.parentOfType
 import com.intellij.psi.xml.XmlTag
+import com.intellij.spring.constants.SpringAnnotationsConstants
 import com.intellij.spring.constants.SpringAnnotationsConstants.AUTOWIRED
 import com.intellij.spring.constants.SpringAnnotationsConstants.QUALIFIER
 import com.intellij.spring.constants.SpringAnnotationsConstants.VALUE
@@ -320,19 +321,73 @@ private fun PsiField.isCandidate(): Boolean {
 
     assignmentExpressions().isEmpty() || return false
 
-    !isInsideSpringTestContextClass() || return false
+    val containingClass = containingClass ?: return false
+
+    !containingClass.isTestNgSpringTestContextClass() || return false
+
+    when (containingClass.constructors.size) {
+        0 -> containingClass.allUsagesAreNotFromBeanMethodsUsedForInjection() || return false
+        1 -> containingClass.constructors[0].allUsagesAreNotFromBeanMethodsUsedForInjection() || return false
+        else -> return false
+    }
 
     return true
 }
 
-private fun PsiField.isInsideSpringTestContextClass(): Boolean = containingClass!!
-    .hasAnnotation("org.springframework.test.context.ContextConfiguration")
+private fun PsiClass.isTestNgSpringTestContextClass(): Boolean {
+    // TODO: TestNG part
 
-private fun PsiMethod.allUsagesAreRightAfterConstructorCall(): Boolean {
+    var currentClass: PsiClass? = this
+
+    while (true) {
+        if (currentClass == null) return false
+
+        currentClass.hasAnnotation(SpringAnnotationsConstants.CONTEXT_CONFIGURATION) && return true
+
+        currentClass = currentClass.superClass
+    }
+}
+
+private fun PsiMethod.allUsagesAreRightAfterConstructorCall(): Boolean = ReferencesSearch
+    .search(this)
+    .map { it.isSetterCallRightAfterConstructorCall() }
+    .all { it }
+
+private fun PsiElement.allUsagesAreNotFromBeanMethodsUsedForInjection(): Boolean = ReferencesSearch
+    .search(this)
+    .map { it.isNewExpressionInsideBeanMethodUsedForInjection() }
+    .none { it }
+
+private fun PsiReference.isNewExpressionInsideBeanMethodUsedForInjection(): Boolean {
+    val reference = castSafelyTo<PsiJavaCodeReferenceElement>() ?: return false
+
+    val newExpression = reference.element.parent.castSafelyTo<PsiNewExpression>() ?: return false
+
+    val method = newExpression.parentOfType<PsiMethod>() ?: return false
+
+    return method.isBeanMethodUsedForInjection()
+}
+
+private fun PsiMethod.isBeanMethod() = hasAnnotation(SpringAnnotationsConstants.JAVA_SPRING_BEAN)
+
+private fun PsiMethod.isBeanMethodUsedForInjection(): Boolean {
+    isBeanMethod() || return false
+
     return ReferencesSearch
         .search(this)
-        .map { it.isSetterCallRightAfterConstructorCall() }
-        .all { it }
+        .map { it.isMethodCallInsideBeanMethod() }
+        .any { it }
+}
+
+private fun PsiReference.isMethodCallInsideBeanMethod(): Boolean {
+    val reference = castSafelyTo<PsiJavaCodeReferenceElement>() ?: return false
+
+    val methodCall =
+        reference.element.parentOfType<PsiMethodCallExpression>() ?: return false
+
+    val method = methodCall.parentOfType<PsiMethod>() ?: return false
+
+    return method.isBeanMethod()
 }
 
 fun PsiReference.isSetterCallRightAfterConstructorCall(): Boolean {
@@ -397,7 +452,7 @@ fun PsiReference.isSetterCallRightAfterConstructorCall(): Boolean {
 private fun PsiNewExpression.getBeanAnnotatedMethod(): PsiMethod? {
     val psiMethod = parentOfType<PsiMethod>() ?: return null
 
-    if (!psiMethod.hasAnnotation("org.springframework.context.annotation.Bean")) return null
+    if (!psiMethod.isBeanMethod()) return null
 
     return psiMethod
 }
