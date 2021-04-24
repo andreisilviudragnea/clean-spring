@@ -7,10 +7,12 @@ import com.intellij.codeInspection.ProblemHighlightType
 import com.intellij.codeInspection.ProblemsHolder
 import com.intellij.openapi.project.Project
 import com.intellij.psi.JavaElementVisitor
+import com.intellij.psi.PsiAnnotation
 import com.intellij.psi.PsiAnonymousClass
 import com.intellij.psi.PsiAssignmentExpression
 import com.intellij.psi.PsiBlockStatement
 import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiClassObjectAccessExpression
 import com.intellij.psi.PsiCodeBlock
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiElementFactory
@@ -326,11 +328,13 @@ private fun PsiField.isCandidate(): Boolean {
 
     containingClass !is PsiAnonymousClass || return false
 
-    !containingClass.isTestNgSpringTestContextClass() || return false
+    containingClass.isTestNgSpringTestContextClass() && return false
 
-    !hasFieldWithSameNameInParentClass() || return false
+    containingClass.isEntityListenerClass() && return false
 
-    !hasFieldWithSameNameInAnySubclass() || return false
+    hasFieldWithSameNameInParentClass() && return false
+
+    hasFieldWithSameNameInAnySubclass() && return false
 
     when (containingClass.constructors.size) {
         0 -> containingClass.noUsageIsFromCalledBeanMethods() || return false
@@ -348,6 +352,26 @@ private fun PsiField.isCandidate(): Boolean {
     }
 
     return true
+}
+
+private fun PsiClass.isEntityListenerClass(): Boolean = searchReferencesInProject()
+    .map { it.isEntityListener() }
+    .any { it }
+
+private fun PsiReference.isEntityListener(): Boolean {
+    this is PsiJavaCodeReferenceElement || return false
+
+    val annotation = element.parentOfType<PsiAnnotation>() ?: return false
+
+    annotation.qualifiedName == "javax.persistence.EntityListeners" || return false
+
+    val classObjectAccessExpression =
+        element.parentOfType<PsiClassObjectAccessExpression>() ?: return false
+
+    return annotation
+        .parameterList
+        .attributes
+        .firstOrNull { it.value == classObjectAccessExpression } != null
 }
 
 private fun PsiField.hasFieldWithSameNameInAnySubclass(): Boolean = containingClass!!
@@ -505,7 +529,7 @@ fun PsiReference.isSetterCallRightAfterConstructorCall(): Boolean {
 private fun PsiNewExpression.getBeanAnnotatedMethod(): PsiMethod? {
     val psiMethod = parentOfType<PsiMethod>() ?: return null
 
-    if (!psiMethod.isBeanMethod()) return null
+    psiMethod.isBeanMethod() || return null
 
     return psiMethod
 }
@@ -591,17 +615,17 @@ private fun PsiClass.addDefaultConstructor(): PsiMethod {
 }
 
 private fun PsiMethod.setterParameter(): PsiParameter? {
-    if (!name.matches(Regex("set\\S+"))) return null
+    name.matches(Regex("set\\S+")) || return null
 
     val parameters = parameterList.parameters
 
-    if (parameters.size != 1) return null
+    parameters.size == 1 || return null
 
-    if (!returnsVoid()) return null
+    returnsVoid() || return null
 
     val statements = body?.statements ?: return null
 
-    if (statements.size != 1) return null
+    statements.size != 1 || return null
 
     val expressionStatement = statements[0].castSafelyTo<PsiExpressionStatement>() ?: return null
 
@@ -634,7 +658,7 @@ private fun PsiMethod.getField() = body!!
 private fun PsiField.getSoleAssignment(): PsiAssignmentExpression? {
     val assignments = assignmentExpressions()
 
-    if (assignments.size != 1) return null
+    assignments.size == 1 || return null
 
     return assignments[0]
 }
