@@ -32,6 +32,7 @@ import com.intellij.psi.PsiStatement
 import com.intellij.psi.PsiThisExpression
 import com.intellij.psi.PsiType
 import com.intellij.psi.PsiVariable
+import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.LocalSearchScope
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.psi.util.parentOfType
@@ -41,6 +42,7 @@ import com.intellij.spring.constants.SpringAnnotationsConstants.AUTOWIRED
 import com.intellij.spring.constants.SpringAnnotationsConstants.QUALIFIER
 import com.intellij.spring.constants.SpringAnnotationsConstants.VALUE
 import com.intellij.spring.model.properties.PropertyReference
+import com.intellij.util.Query
 import com.intellij.util.castSafelyTo
 import org.jetbrains.kotlin.idea.util.application.runWriteAction
 import org.jetbrains.kotlin.j2k.getContainingClass
@@ -121,8 +123,8 @@ class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspecti
                     }
                 }
 
-                ReferencesSearch
-                    .search(setterMethod)
+                setterMethod
+                    .searchReferencesInProject()
                     .forEach {
                         when (it) {
                             is PropertyReference -> it.processXmlPropertyReference()
@@ -149,7 +151,7 @@ private data class PropertyInjectionContext(
 
     private fun PsiMethod.processConstructorUsages(bodyTransformer: PsiMethod.() -> Unit,
                                                    newExpressionProcessor: PsiNewExpression.() -> Unit) {
-        val query = ReferencesSearch.search(this).findAll()
+        val query = this.searchReferencesInProject().findAll()
 
         addParameter()
 
@@ -246,8 +248,8 @@ private data class PropertyInjectionContext(
     }
 
     private fun PsiVariable.getSetterArgument(): PsiExpression? {
-        val setterArguments = ReferencesSearch
-            .search(this)
+        val setterArguments = this
+            .searchReferencesInProject()
             .mapNotNull { it.getSetterArgumentExpression() }
 
         if (setterArguments.size != 1) return null
@@ -348,8 +350,8 @@ private fun PsiField.isCandidate(): Boolean {
     return true
 }
 
-private fun PsiField.hasFieldWithSameNameInAnySubclass(): Boolean = ReferencesSearch
-    .search(containingClass!!)
+private fun PsiField.hasFieldWithSameNameInAnySubclass(): Boolean = containingClass!!
+    .searchReferencesInProject()
     .map { hasFieldWithSameNameInSubclass(it) }
     .any { it }
 
@@ -399,13 +401,13 @@ private fun PsiClass.isTestNgSpringTestContextClass(): Boolean {
     }
 }
 
-private fun PsiMethod.allUsagesAreRightAfterConstructorCall(): Boolean = ReferencesSearch
-    .search(this)
+private fun PsiMethod.allUsagesAreRightAfterConstructorCall(): Boolean = this
+    .searchReferencesInProject()
     .map { it.isSetterCallRightAfterConstructorCall() }
     .all { it }
 
-private fun PsiElement.noUsageIsFromCalledBeanMethods(): Boolean = ReferencesSearch
-    .search(this)
+private fun PsiElement.noUsageIsFromCalledBeanMethods(): Boolean = this
+    .searchReferencesInProject()
     .map { it.isNewExpressionInsideCalledBeanMethod() }
     .none { it }
 
@@ -424,8 +426,8 @@ private fun PsiMethod.isBeanMethod() = hasAnnotation(SpringAnnotationsConstants.
 private fun PsiMethod.isCalledBeanMethod(): Boolean {
     isBeanMethod() || return false
 
-    return ReferencesSearch
-        .search(this)
+    return this
+        .searchReferencesInProject()
         .map { it.isMethodCall() }
         .any { it }
 }
@@ -637,8 +639,8 @@ private fun PsiField.getSoleAssignment(): PsiAssignmentExpression? {
     return assignments[0]
 }
 
-private fun PsiField.assignmentExpressions() = ReferencesSearch
-    .search(this)
+private fun PsiField.assignmentExpressions() = this
+    .searchReferencesInProject()
     .mapNotNull { it.asAssignmentExpression() }
 
 private fun PsiReference.asAssignmentExpression(): PsiAssignmentExpression? {
@@ -667,3 +669,6 @@ private val PsiType.defaultValue
         this == PsiType.BOOLEAN -> "false"
         else -> "null"
     }
+
+private fun PsiElement.searchReferencesInProject(): Query<PsiReference> =
+    ReferencesSearch.search(this, GlobalSearchScope.projectScope(project))
