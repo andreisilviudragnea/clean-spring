@@ -328,6 +328,8 @@ private fun PsiField.isCandidate(): Boolean {
 
     !hasFieldWithSameNameInParentClass() || return false
 
+    !hasFieldWithSameNameInAnySubclass() || return false
+
     when (containingClass.constructors.size) {
         0 -> containingClass.noUsageIsFromCalledBeanMethods() || return false
         1 -> {
@@ -344,6 +346,30 @@ private fun PsiField.isCandidate(): Boolean {
     }
 
     return true
+}
+
+private fun PsiField.hasFieldWithSameNameInAnySubclass(): Boolean = ReferencesSearch
+    .search(containingClass!!)
+    .map { hasFieldWithSameNameInSubclass(it) }
+    .any { it }
+
+private fun PsiField.hasFieldWithSameNameInSubclass(reference: PsiReference): Boolean {
+    val subclass = reference.getSubclass() ?: return false
+
+    val name = name
+    return subclass.fields.any { it.name == name }
+}
+
+private fun PsiReference.getSubclass(): PsiClass? {
+    this is PsiJavaCodeReferenceElement || return null
+
+    val psiClass = element.parentOfType<PsiClass>() ?: return null
+
+    val extendsList = psiClass.extendsList ?: return null
+
+    this in extendsList.referenceElements || return null
+
+    return psiClass
 }
 
 private fun PsiField.hasFieldWithSameNameInParentClass(): Boolean {
