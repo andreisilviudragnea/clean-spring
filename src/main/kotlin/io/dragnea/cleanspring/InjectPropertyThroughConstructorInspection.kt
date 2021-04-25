@@ -425,17 +425,21 @@ private fun PsiField.hasFieldWithSameNameInParentClass(): Boolean {
 }
 
 private fun PsiClass.isTestNgSpringTestContextClass(): Boolean {
-    // TODO: TestNG part
+    val extendsList = extendsList ?: return false
 
-    var currentClass: PsiClass? = this
+    return extendsList
+        .referenceElements
+        .firstOrNull { it.isReferenceToAbstractTestNgSpringContextTests() } != null
+}
 
-    while (true) {
-        if (currentClass == null) return false
+private fun PsiReference.isReferenceToAbstractTestNgSpringContextTests(): Boolean {
+    if (this !is PsiJavaCodeReferenceElement) return false
 
-        currentClass.hasAnnotation(SpringAnnotationsConstants.CONTEXT_CONFIGURATION) && return true
+    val psiClass = resolve().castSafelyTo<PsiClass>() ?: return false
 
-        currentClass = currentClass.superClass
-    }
+    psiClass.qualifiedName == "org.springframework.test.context.testng.AbstractTestNGSpringContextTests" && return true
+
+    return false
 }
 
 private fun PsiMethod.allUsagesAreRightAfterConstructorCall(): Boolean = this
