@@ -332,6 +332,8 @@ private fun PsiField.isCandidate(): Boolean {
 
     containingClass.isEntityListenerClass() && return false
 
+    containingClass.isServletClassReferencedInWebXml() && return false
+
     hasFieldWithSameNameInParentClass() && return false
 
     hasFieldWithSameNameInAnySubclass() && return false
@@ -352,6 +354,19 @@ private fun PsiField.isCandidate(): Boolean {
     }
 
     return true
+}
+
+private fun PsiClass.isServletClassReferencedInWebXml(): Boolean = this
+     .searchReferencesInProject()
+     .map { it.isServletClassTag() }
+     .any { it }
+
+private fun PsiReference.isServletClassTag(): Boolean {
+    val element = element
+
+    if (element !is XmlTag) return false
+
+    return element.name == "servlet-class"
 }
 
 private fun PsiClass.isEntityListenerClass(): Boolean = searchReferencesInProject()
