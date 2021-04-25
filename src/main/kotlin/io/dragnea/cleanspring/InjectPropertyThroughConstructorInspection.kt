@@ -640,7 +640,7 @@ private fun PsiMethod.setterParameter(): PsiParameter? {
 
     val statements = body?.statements ?: return null
 
-    statements.size != 1 || return null
+    statements.size == 1 || return null
 
     val expressionStatement = statements[0].castSafelyTo<PsiExpressionStatement>() ?: return null
 
@@ -655,7 +655,7 @@ private fun PsiMethod.setterParameter(): PsiParameter? {
     val rExpression =
         assignmentExpression.rExpression.castSafelyTo<PsiReferenceExpression>() ?: return null
 
-    if (rExpression.resolve() != parameters[0]) return null
+    rExpression.resolve() == parameters[0] || return null
 
     return parameters[0]
 }
