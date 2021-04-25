@@ -15,7 +15,6 @@ import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiClassObjectAccessExpression
 import com.intellij.psi.PsiCodeBlock
 import com.intellij.psi.PsiElement
-import com.intellij.psi.PsiElementFactory
 import com.intellij.psi.PsiElementVisitor
 import com.intellij.psi.PsiExpression
 import com.intellij.psi.PsiExpressionStatement
@@ -34,15 +33,12 @@ import com.intellij.psi.PsiStatement
 import com.intellij.psi.PsiThisExpression
 import com.intellij.psi.PsiType
 import com.intellij.psi.PsiVariable
-import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.psi.util.parentOfType
 import com.intellij.psi.xml.XmlTag
-import com.intellij.spring.constants.SpringAnnotationsConstants
 import com.intellij.spring.constants.SpringAnnotationsConstants.AUTOWIRED
 import com.intellij.spring.constants.SpringAnnotationsConstants.QUALIFIER
 import com.intellij.spring.constants.SpringAnnotationsConstants.VALUE
 import com.intellij.spring.model.properties.PropertyReference
-import com.intellij.util.Query
 import com.intellij.util.castSafelyTo
 import org.jetbrains.kotlin.idea.util.application.runWriteAction
 import org.jetbrains.kotlin.j2k.getContainingClass
@@ -53,7 +49,7 @@ class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspecti
     override fun buildVisitor(holder: ProblemsHolder, isOnTheFly: Boolean): PsiElementVisitor {
         return object : JavaElementVisitor() {
             override fun visitField(field: PsiField) {
-                field.isCandidate() || return
+                field.isPropertyInjectableThroughConstructor() || return
 
                 holder.registerProblem(
                     field.nameIdentifier,
@@ -64,7 +60,7 @@ class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspecti
             }
 
             override fun visitMethod(method: PsiMethod) {
-                method.isCandidate() || return
+                method.isSetterForPropertyInjectableThroughConstructor() || return
 
                 holder.registerProblem(
                     method.nameIdentifier!!,
@@ -83,6 +79,11 @@ class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspecti
             val field = descriptor.psiElement.parentOfType<PsiField>()!!
 
             runWriteAction {
+                if (field.references().findAll().isEmpty()) {
+                    field.delete()
+                    return@runWriteAction
+                }
+
                 PropertyInjectionContext(field).apply {
                     field.containingClass!!.getOrCreateConstructor()
                         .processConstructorUsagesForField {
@@ -301,7 +302,7 @@ private data class PropertyInjectionContext(
     }
 }
 
-private fun PsiMethod.isCandidate(): Boolean {
+private fun PsiMethod.isSetterForPropertyInjectableThroughConstructor(): Boolean {
     setterParameter() ?: return false
 
     val containingClass = containingClass ?: return false
@@ -317,7 +318,7 @@ private fun PsiMethod.isCandidate(): Boolean {
     return true
 }
 
-private fun PsiField.isCandidate(): Boolean {
+private fun PsiField.isPropertyInjectableThroughConstructor(): Boolean {
     hasAnnotation(AUTOWIRED) || hasAnnotation(VALUE) || return false
 
     assignmentExpressions().isEmpty() || return false
@@ -457,8 +458,6 @@ private fun PsiReference.isNewExpressionInsideCalledBeanMethod(): Boolean {
     return method.isCalledBeanMethod()
 }
 
-private fun PsiMethod.isBeanMethod() = hasAnnotation(SpringAnnotationsConstants.JAVA_SPRING_BEAN)
-
 private fun PsiMethod.isCalledBeanMethod(): Boolean {
     isBeanMethod() || return false
 
@@ -564,8 +563,6 @@ private fun PropertyReference.processXmlPropertyReference() {
     val propertyTag = element.parentOfType<XmlTag>()!!
     propertyTag.name = "constructor-arg"
 }
-
-private val PsiElement.factory get() = PsiElementFactory.getInstance(project)
 
 private fun PsiMethod.getSuperCall(): PsiMethodCallExpression {
     val body = body!!
@@ -704,6 +701,3 @@ private val PsiType.defaultValue
         this == PsiType.BOOLEAN -> "false"
         else -> "null"
     }
-
-private fun PsiElement.references(): Query<PsiReference> =
-    ReferencesSearch.search(this, useScope)

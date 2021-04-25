@@ -61,6 +61,17 @@
         />
     </extensions>
 
+    <extensions defaultExtensionNs="com.intellij">
+        <localInspection implementationClass="io.dragnea.cleanspring.InjectFieldAsBeanParameterInspection"
+                         displayName="Inject field as bean parameter"
+                         groupPath="Spring,Spring Core"
+                         groupName="Code"
+                         enabledByDefault="true"
+                         level="WARNING"
+                         language="JAVA"
+        />
+    </extensions>
+
     <actions>
         <!-- Add your actions here -->
     </actions>
