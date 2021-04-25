@@ -326,7 +326,7 @@ private fun PsiField.isCandidate(): Boolean {
 
     containingClass !is PsiAnonymousClass || return false
 
-    containingClass.isTestNgSpringTestContextClass() && return false
+    containingClass.extends("org.springframework.test.context.testng.AbstractTestNGSpringContextTests") && return false
 
     containingClass.isEntityListenerClass() && return false
 
@@ -424,22 +424,17 @@ private fun PsiField.hasFieldWithSameNameInParentClass(): Boolean {
     }
 }
 
-private fun PsiClass.isTestNgSpringTestContextClass(): Boolean {
+private fun PsiClass.extends(qualifiedName: String): Boolean {
     val extendsList = extendsList ?: return false
 
     return extendsList
         .referenceElements
-        .firstOrNull { it.isReferenceToAbstractTestNgSpringContextTests() } != null
+        .firstOrNull { it.isReferenceToClass(qualifiedName) } != null
 }
 
-private fun PsiReference.isReferenceToAbstractTestNgSpringContextTests(): Boolean {
-    if (this !is PsiJavaCodeReferenceElement) return false
-
+private fun PsiJavaCodeReferenceElement.isReferenceToClass(qualifiedName: String): Boolean {
     val psiClass = resolve().castSafelyTo<PsiClass>() ?: return false
-
-    psiClass.qualifiedName == "org.springframework.test.context.testng.AbstractTestNGSpringContextTests" && return true
-
-    return false
+    return psiClass.qualifiedName == qualifiedName
 }
 
 private fun PsiMethod.allUsagesAreRightAfterConstructorCall(): Boolean = this
