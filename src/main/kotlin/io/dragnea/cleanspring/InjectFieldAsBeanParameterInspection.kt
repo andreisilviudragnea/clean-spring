@@ -17,6 +17,7 @@ import com.intellij.spring.constants.SpringAnnotationsConstants.AUTOWIRED
 import com.intellij.spring.constants.SpringAnnotationsConstants.QUALIFIER
 import com.intellij.spring.constants.SpringAnnotationsConstants.VALUE
 import com.intellij.util.castSafelyTo
+import org.jetbrains.kotlin.idea.util.application.runWriteAction
 import org.jetbrains.kotlin.utils.addToStdlib.cast
 
 class InjectFieldAsBeanParameterInspection : AbstractBaseJavaLocalInspectionTool() {
@@ -45,24 +46,30 @@ class InjectFieldAsBeanParameterInspection : AbstractBaseJavaLocalInspectionTool
             // when field is referenced more than once in the same method
             val field = expression.resolve().castSafelyTo<PsiField>() ?: return
 
-            val beanMethod = expression.parentOfType<PsiMethod>()!!
+            runWriteAction {
+                val beanMethod = expression.parentOfType<PsiMethod>()!!
 
-            expression.qualifierExpression = null
+                expression.qualifierExpression = null
 
-            val parameter = beanMethod.parameterList.add(
-                beanMethod.factory.createParameter(field.name, field.type)
-            ).cast<PsiParameter>()
+                val parameter = beanMethod.parameterList.add(
+                    beanMethod.factory.createParameter(field.name, field.type)
+                ).cast<PsiParameter>()
 
-            val modifierList = parameter.modifierList!!
+                val modifierList = parameter.modifierList!!
 
-            field.getAnnotation(QUALIFIER)?.let { modifierList.add(it) }
+                field.getAnnotation(QUALIFIER)?.let { modifierList.add(it) }
 
-            field.getAnnotation(VALUE)?.let { modifierList.add(it) }
+                field.getAnnotation(VALUE)?.let { modifierList.add(it) }
+            }
 
-            if (field.references().findAll().isEmpty()) {
-                field.delete()
+            runWriteAction {
+                if (field.references().findAll().isEmpty()) {
+                    field.delete()
+                }
             }
         }
+
+        override fun startInWriteAction() = false
     }
 }
 
