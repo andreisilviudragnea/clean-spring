@@ -34,8 +34,6 @@ import com.intellij.psi.PsiStatement
 import com.intellij.psi.PsiThisExpression
 import com.intellij.psi.PsiType
 import com.intellij.psi.PsiVariable
-import com.intellij.psi.search.GlobalSearchScope
-import com.intellij.psi.search.LocalSearchScope
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.psi.util.parentOfType
 import com.intellij.psi.xml.XmlTag
@@ -126,7 +124,7 @@ class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspecti
                 }
 
                 setterMethod
-                    .searchReferencesInProject()
+                    .references()
                     .forEach {
                         when (it) {
                             is PropertyReference -> it.processXmlPropertyReference()
@@ -153,7 +151,7 @@ private data class PropertyInjectionContext(
 
     private fun PsiMethod.processConstructorUsages(bodyTransformer: PsiMethod.() -> Unit,
                                                    newExpressionProcessor: PsiNewExpression.() -> Unit) {
-        val query = this.searchReferencesInProject().findAll()
+        val query = this.references().findAll()
 
         addParameter()
 
@@ -251,7 +249,7 @@ private data class PropertyInjectionContext(
 
     private fun PsiVariable.getSetterArgument(): PsiExpression? {
         val setterArguments = this
-            .searchReferencesInProject()
+            .references()
             .mapNotNull { it.getSetterArgumentExpression() }
 
         if (setterArguments.size != 1) return null
@@ -345,7 +343,7 @@ private fun PsiField.isCandidate(): Boolean {
 
             val parameters = constructor.parameterList.parameters
             if (parameters.isNotEmpty()) {
-                !parameters.last().isVarArgs || return false
+                parameters.last().isVarArgs && return false
             }
 
             constructor.noUsageIsFromCalledBeanMethods() || return false
@@ -357,7 +355,7 @@ private fun PsiField.isCandidate(): Boolean {
 }
 
 private fun PsiClass.isServletClassReferencedInWebXml(): Boolean = this
-     .searchReferencesInProject()
+     .references()
      .map { it.isServletClassTag() }
      .any { it }
 
@@ -369,7 +367,7 @@ private fun PsiReference.isServletClassTag(): Boolean {
     return element.name == "servlet-class"
 }
 
-private fun PsiClass.isEntityListenerClass(): Boolean = searchReferencesInProject()
+private fun PsiClass.isEntityListenerClass(): Boolean = references()
     .map { it.isEntityListener() }
     .any { it }
 
@@ -390,7 +388,7 @@ private fun PsiReference.isEntityListener(): Boolean {
 }
 
 private fun PsiField.hasFieldWithSameNameInAnySubclass(): Boolean = containingClass!!
-    .searchReferencesInProject()
+    .references()
     .map { hasFieldWithSameNameInSubclass(it) }
     .any { it }
 
@@ -441,12 +439,12 @@ private fun PsiClass.isTestNgSpringTestContextClass(): Boolean {
 }
 
 private fun PsiMethod.allUsagesAreRightAfterConstructorCall(): Boolean = this
-    .searchReferencesInProject()
+    .references()
     .map { it.isSetterCallRightAfterConstructorCall() }
     .all { it }
 
 private fun PsiElement.noUsageIsFromCalledBeanMethods(): Boolean = this
-    .searchReferencesInProject()
+    .references()
     .map { it.isNewExpressionInsideCalledBeanMethod() }
     .none { it }
 
@@ -466,7 +464,7 @@ private fun PsiMethod.isCalledBeanMethod(): Boolean {
     isBeanMethod() || return false
 
     return this
-        .searchReferencesInProject()
+        .references()
         .map { it.isMethodCall() }
         .any { it }
 }
@@ -496,15 +494,15 @@ fun PsiReference.isSetterCallRightAfterConstructorCall(): Boolean {
         qualifierExpression.resolve().castSafelyTo<PsiVariable>() ?: return false
 
     if (psiVariable is PsiLocalVariable) {
-        val block = psiVariable.parentOfType<PsiCodeBlock>() ?: return false
-
         val statements =
-            ReferencesSearch.search(psiVariable, LocalSearchScope(block)).mapNotNull {
+            psiVariable.references().mapNotNull {
                 it.element.parentOfType<PsiStatement>()
             }
 
         val setterStatement =
             referenceExpression.parentOfType<PsiStatement>() ?: return false
+
+        val block = psiVariable.parentOfType<PsiCodeBlock>() ?: return false
 
         val firstReferencedStatement =
             block.statements.firstOrNull { it in statements } ?: return false
@@ -523,11 +521,10 @@ fun PsiReference.isSetterCallRightAfterConstructorCall(): Boolean {
 
         val soleAssignmentStatement = soleAssignment.parentOfType<PsiStatement>()
 
-        val statements =
-            ReferencesSearch
-                .search(psiVariable, LocalSearchScope(setterCallBlock))
-                .mapNotNull { it.element.parentOfType<PsiStatement>() }
-                .filter { it != soleAssignmentStatement }
+        val statements = psiVariable
+            .references()
+            .mapNotNull { it.element.parentOfType<PsiStatement>() }
+            .filter { it != soleAssignmentStatement }
 
         val setterStatement =
             referenceExpression.parentOfType<PsiStatement>() ?: return false
@@ -679,7 +676,7 @@ private fun PsiField.getSoleAssignment(): PsiAssignmentExpression? {
 }
 
 private fun PsiField.assignmentExpressions() = this
-    .searchReferencesInProject()
+    .references()
     .mapNotNull { it.asAssignmentExpression() }
 
 private fun PsiReference.asAssignmentExpression(): PsiAssignmentExpression? {
@@ -709,5 +706,5 @@ private val PsiType.defaultValue
         else -> "null"
     }
 
-private fun PsiElement.searchReferencesInProject(): Query<PsiReference> =
-    ReferencesSearch.search(this, GlobalSearchScope.projectScope(project))
+private fun PsiElement.references(): Query<PsiReference> =
+    ReferencesSearch.search(this, useScope)
