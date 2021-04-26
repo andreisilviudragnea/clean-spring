@@ -150,8 +150,10 @@ private data class PropertyInjectionContext(
     fun PsiMethod.processConstructorUsagesForField(bodyTransformer: PsiMethod.() -> Unit) =
         processConstructorUsages(bodyTransformer) { processBeanMethodOrDefault() }
 
-    private fun PsiMethod.processConstructorUsages(bodyTransformer: PsiMethod.() -> Unit,
-                                                   newExpressionProcessor: PsiNewExpression.() -> Unit) {
+    private fun PsiMethod.processConstructorUsages(
+        bodyTransformer: PsiMethod.() -> Unit,
+        newExpressionProcessor: PsiNewExpression.() -> Unit
+    ) {
         val query = this.references().findAll()
 
         addParameter()
@@ -356,9 +358,9 @@ private fun PsiField.isPropertyInjectableThroughConstructor(): Boolean {
 }
 
 private fun PsiClass.isServletClassReferencedInWebXml(): Boolean = this
-     .references()
-     .map { it.isServletClassTag() }
-     .any { it }
+    .references()
+    .map { it.isServletClassTag() }
+    .any { it }
 
 private fun PsiReference.isServletClassTag(): Boolean {
     val element = element

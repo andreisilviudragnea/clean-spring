@@ -119,10 +119,12 @@ private fun PsiClass.importClass(classToImport: PsiClass) {
             )
         }
         is PsiClassObjectAccessExpression -> {
-            importAnnotation.replace(elementFactory.createAnnotationFromText(
-                "@${importAnnotation.nameReferenceElement!!.text}({${valueAttribute.text}, ${classToImport.getImportReferenceName()}.class})",
-                this
-            ))
+            importAnnotation.replace(
+                elementFactory.createAnnotationFromText(
+                    "@${importAnnotation.nameReferenceElement!!.text}({${valueAttribute.text}, ${classToImport.getImportReferenceName()}.class})",
+                    this
+                )
+            )
         }
         else -> throw IllegalStateException("Impossible")
     }
