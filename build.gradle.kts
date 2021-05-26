@@ -1,7 +1,7 @@
 plugins {
-    id("org.jetbrains.intellij") version "0.7.2"
+    id("org.jetbrains.intellij") version "0.7.3"
     java
-    kotlin("jvm") version "1.4.32"
+    kotlin("jvm") version "1.5.10"
     id("org.jlleitschuh.gradle.ktlint") version "10.0.0"
 }
 
@@ -9,12 +9,12 @@ group = "io.dragnea"
 version = "1.0-SNAPSHOT"
 
 intellij {
-    version = "IU-2021.1"
+    version = "IU-2021.1.1"
 
     setPlugins(
         "java",
         "Spring",
-        "org.jetbrains.kotlin:211-1.4.32-release-IJ6693.72"
+        "org.jetbrains.kotlin:211-1.5.10-release-891-IJ7142.45"
     )
 
     updateSinceUntilBuild = false
