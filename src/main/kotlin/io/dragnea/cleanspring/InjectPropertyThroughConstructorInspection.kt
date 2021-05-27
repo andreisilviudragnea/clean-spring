@@ -48,10 +48,25 @@ import org.jetbrains.kotlin.utils.addToStdlib.cast
 // TOOO: Run this after InjectFieldAsBeanParameterInspection, because the other one might avoid circular
 // dependencies. See TestSpringConfigBase and ConsulDynamicConfig. Analyze the field usages
 // to decide if you inject all usages as bean parameters or the field as constructor dependency
+// check IncrementalCreateControllerTest through CoreMockMvcConfiguration
+// ClientsUpdateControllerIT OAuth2Impl vs OAuth2
+// TokenManagementControllerIT OAuth2Impl vs OAuth2
+// InvalidateTokenV2IT
+// RevokeTokenIT
 class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspectionTool() {
     override fun buildVisitor(holder: ProblemsHolder, isOnTheFly: Boolean): PsiElementVisitor {
         return object : JavaElementVisitor() {
             override fun visitField(field: PsiField) {
+                if (field.canBeInjectedAsBeanParameter()) {
+                    holder.registerProblem(
+                        field.nameIdentifier,
+                        "Field can be injected as @Bean parameter",
+                        ProblemHighlightType.WARNING,
+                        InjectFieldAsBeanParameterFix()
+                    )
+                    return
+                }
+
                 field.isPropertyInjectableThroughConstructor() || return
 
                 holder.registerProblem(
@@ -72,6 +87,16 @@ class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspecti
                     MethodFix()
                 )
             }
+        }
+    }
+
+    class InjectFieldAsBeanParameterFix : LocalQuickFix {
+        override fun getFamilyName() = "Inject field as @Bean parameter"
+
+        override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
+            val field = descriptor.psiElement.parent.cast<PsiField>()
+            field.references().forEach { it.injectAsBeanParameter(field) }
+            field.delete()
         }
     }
 
@@ -142,6 +167,43 @@ class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspecti
 
         override fun startInWriteAction() = false
     }
+}
+
+fun PsiReference.injectAsBeanParameter(field: PsiField) {
+    if (this !is PsiReferenceExpression) return
+
+    val beanMethod = parentOfType<PsiMethod>()!!
+
+    qualifierExpression = null
+
+    val fieldName = field.name
+
+    if (beanMethod.parameterList.parameters.any { it.name == fieldName }) {
+        return
+    }
+
+    val parameter = beanMethod.parameterList.add(
+        beanMethod.factory.createParameter(fieldName, field.type)
+    ).cast<PsiParameter>()
+
+    val modifierList = parameter.modifierList!!
+
+    field.getAnnotation(QUALIFIER)?.let { modifierList.add(it) }
+    field.getAnnotation(VALUE)?.let { modifierList.add(it) }
+}
+
+fun PsiField.canBeInjectedAsBeanParameter(): Boolean {
+    hasAnnotation(AUTOWIRED) || hasAnnotation(VALUE) || return false
+
+    return references().all { it.isReferenceToFieldInsideBeanMethod() }
+}
+
+fun PsiReference.isReferenceToFieldInsideBeanMethod(): Boolean {
+    if (this !is PsiReferenceExpression) return false
+
+    val psiMethod = parentOfType<PsiMethod>() ?: return false
+
+    return psiMethod.isBeanMethod() || return false
 }
 
 private data class PropertyInjectionContext(
