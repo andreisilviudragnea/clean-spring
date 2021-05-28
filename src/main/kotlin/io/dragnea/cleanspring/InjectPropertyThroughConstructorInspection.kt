@@ -57,6 +57,18 @@ class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspecti
     override fun buildVisitor(holder: ProblemsHolder, isOnTheFly: Boolean): PsiElementVisitor {
         return object : JavaElementVisitor() {
             override fun visitField(field: PsiField) {
+                field.isInjected() || return
+
+                if (field.references().toList().isEmpty()) {
+                    holder.registerProblem(
+                        field.nameIdentifier,
+                        "Injected field is never used",
+                        ProblemHighlightType.WARNING,
+                        RemoveUnusedInjectedFieldFix()
+                    )
+                    return
+                }
+
                 if (field.canBeInjectedAsBeanParameter()) {
                     holder.registerProblem(
                         field.nameIdentifier,
@@ -87,6 +99,14 @@ class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspecti
                     MethodFix()
                 )
             }
+        }
+    }
+
+    class RemoveUnusedInjectedFieldFix : LocalQuickFix {
+        override fun getFamilyName() = "Remove unused injected field"
+
+        override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
+            descriptor.psiElement.cast<PsiField>().delete()
         }
     }
 
@@ -192,13 +212,10 @@ fun PsiReference.injectAsBeanParameter(field: PsiField) {
     field.getAnnotation(VALUE)?.let { modifierList.add(it) }
 }
 
-fun PsiField.canBeInjectedAsBeanParameter(): Boolean {
-    hasAnnotation(AUTOWIRED) || hasAnnotation(VALUE) || return false
+fun PsiField.canBeInjectedAsBeanParameter() =
+    references().all { it.isReferenceToFieldInsideBeanMethod() }
 
-    // TODO: Maybe treat injected field with no usage differently
-
-    return references().all { it.isReferenceToFieldInsideBeanMethod() }
-}
+private fun PsiField.isInjected() = hasAnnotation(AUTOWIRED) || hasAnnotation(VALUE)
 
 fun PsiReference.isReferenceToFieldInsideBeanMethod(): Boolean {
     if (this !is PsiReferenceExpression) return false
@@ -388,8 +405,6 @@ private fun PsiMethod.isSetterForPropertyInjectableThroughConstructor(): Boolean
 }
 
 private fun PsiField.isPropertyInjectableThroughConstructor(): Boolean {
-    hasAnnotation(AUTOWIRED) || hasAnnotation(VALUE) || return false
-
     assignmentExpressions().isEmpty() || return false
 
     val containingClass = containingClass ?: return false
