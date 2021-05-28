@@ -53,7 +53,7 @@ import org.jetbrains.kotlin.utils.addToStdlib.cast
 // TokenManagementControllerIT OAuth2Impl vs OAuth2
 // InvalidateTokenV2IT
 // RevokeTokenIT
-class InjectPropertyThroughConstructorInspection : AbstractBaseJavaLocalInspectionTool() {
+class CleanInjectedPropertiesInspection : AbstractBaseJavaLocalInspectionTool() {
     override fun buildVisitor(holder: ProblemsHolder, isOnTheFly: Boolean): PsiElementVisitor {
         return object : JavaElementVisitor() {
             override fun visitField(field: PsiField) {

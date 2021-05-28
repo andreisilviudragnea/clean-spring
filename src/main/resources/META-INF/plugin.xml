@@ -29,8 +29,8 @@
     -->
 
     <extensions defaultExtensionNs="com.intellij">
-        <localInspection implementationClass="io.dragnea.cleanspring.InjectPropertyThroughConstructorInspection"
-                         displayName="Inject property through constructor"
+        <localInspection implementationClass="io.dragnea.cleanspring.CleanInjectedPropertiesInspection"
+                         displayName="Clean injected properties"
                          groupPath="Spring,Spring Core"
                          groupName="Code"
                          enabledByDefault="true"
