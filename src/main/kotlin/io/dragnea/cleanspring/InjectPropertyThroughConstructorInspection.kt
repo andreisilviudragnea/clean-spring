@@ -392,7 +392,7 @@ private fun PsiField.isPropertyInjectableThroughConstructor(): Boolean {
 
     val containingClass = containingClass ?: return false
 
-    containingClass !is PsiAnonymousClass || return false
+    containingClass is PsiAnonymousClass && return false
 
     containingClass.extends("org.springframework.test.context.testng.AbstractTestNGSpringContextTests") && return false
 
@@ -424,8 +424,7 @@ private fun PsiField.isPropertyInjectableThroughConstructor(): Boolean {
 
 private fun PsiClass.isServletClassReferencedInWebXml(): Boolean = this
     .references()
-    .map { it.isServletClassTag() }
-    .any { it }
+    .any { it.isServletClassTag() }
 
 private fun PsiReference.isServletClassTag(): Boolean {
     val element = element
@@ -435,9 +434,7 @@ private fun PsiReference.isServletClassTag(): Boolean {
     return element.name == "servlet-class"
 }
 
-private fun PsiClass.isEntityListenerClass(): Boolean = references()
-    .map { it.isEntityListener() }
-    .any { it }
+private fun PsiClass.isEntityListenerClass(): Boolean = references().any { it.isEntityListener() }
 
 private fun PsiReference.isEntityListener(): Boolean {
     this is PsiJavaCodeReferenceElement || return false
@@ -457,8 +454,7 @@ private fun PsiReference.isEntityListener(): Boolean {
 
 private fun PsiField.hasFieldWithSameNameInAnySubclass(): Boolean = containingClass!!
     .references()
-    .map { hasFieldWithSameNameInSubclass(it) }
-    .any { it }
+    .any { hasFieldWithSameNameInSubclass(it) }
 
 private fun PsiField.hasFieldWithSameNameInSubclass(reference: PsiReference): Boolean {
     val subclass = reference.getSubclass() ?: return false
@@ -493,27 +489,24 @@ private fun PsiField.hasFieldWithSameNameInParentClass(): Boolean {
 }
 
 private fun PsiClass.extends(qualifiedName: String): Boolean {
-    val extendsList = extendsList ?: return false
+    var superClass = superClass
 
-    return extendsList
-        .referenceElements
-        .firstOrNull { it.isReferenceToClass(qualifiedName) } != null
-}
+    while (true) {
+        if (superClass == null) return false
 
-private fun PsiJavaCodeReferenceElement.isReferenceToClass(qualifiedName: String): Boolean {
-    val psiClass = resolve().castSafelyTo<PsiClass>() ?: return false
-    return psiClass.qualifiedName == qualifiedName
+        if (superClass.qualifiedName == qualifiedName) return true
+
+        superClass = superClass.superClass
+    }
 }
 
 private fun PsiMethod.allUsagesAreRightAfterConstructorCall(): Boolean = this
     .references()
-    .map { it.isSetterCallRightAfterConstructorCall() }
-    .all { it }
+    .all { it.isSetterCallRightAfterConstructorCall() }
 
 private fun PsiElement.noUsageIsFromCalledBeanMethods(): Boolean = this
     .references()
-    .map { it.isNewExpressionInsideCalledBeanMethod() }
-    .none { it }
+    .none { it.isNewExpressionInsideCalledBeanMethod() }
 
 private fun PsiReference.isNewExpressionInsideCalledBeanMethod(): Boolean {
     val reference = castSafelyTo<PsiJavaCodeReferenceElement>() ?: return false
@@ -530,8 +523,7 @@ private fun PsiMethod.isCalledBeanMethod(): Boolean {
 
     return this
         .references()
-        .map { it.isMethodCall() }
-        .any { it }
+        .any { it.isMethodCall() }
 }
 
 private fun PsiReference.isMethodCall(): Boolean {
