@@ -63,7 +63,7 @@ class CleanInjectedPropertiesInspection : AbstractBaseJavaLocalInspectionTool() 
                     holder.registerProblem(
                         field.nameIdentifier,
                         "Injected field is never used",
-                        ProblemHighlightType.WARNING,
+                        ProblemHighlightType.LIKE_UNUSED_SYMBOL,
                         RemoveUnusedInjectedFieldFix()
                     )
                     return
