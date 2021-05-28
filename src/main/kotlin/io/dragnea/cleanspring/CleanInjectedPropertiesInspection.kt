@@ -1,5 +1,6 @@
 package io.dragnea.cleanspring
 
+import com.intellij.codeInsight.actions.OptimizeImportsProcessor
 import com.intellij.codeInspection.AbstractBaseJavaLocalInspectionTool
 import com.intellij.codeInspection.LocalQuickFix
 import com.intellij.codeInspection.ProblemDescriptor
@@ -106,7 +107,10 @@ class CleanInjectedPropertiesInspection : AbstractBaseJavaLocalInspectionTool() 
         override fun getFamilyName() = "Remove unused injected field"
 
         override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
-            descriptor.psiElement.cast<PsiField>().delete()
+            val field = descriptor.psiElement.parent.cast<PsiField>()
+            val file = field.containingFile
+            field.delete()
+            OptimizeImportsProcessor(file.project, file).run()
         }
     }
 
