@@ -45,7 +45,7 @@ import org.jetbrains.kotlin.j2k.getContainingClass
 import org.jetbrains.kotlin.j2k.getContainingMethod
 import org.jetbrains.kotlin.utils.addToStdlib.cast
 
-// TOOO: Run this after InjectFieldAsBeanParameterInspection, because the other one might avoid circular
+// TODO Run this after InjectFieldAsBeanParameterInspection, because the other one might avoid circular
 // dependencies. See TestSpringConfigBase and ConsulDynamicConfig. Analyze the field usages
 // to decide if you inject all usages as bean parameters or the field as constructor dependency
 // check IncrementalCreateControllerTest through CoreMockMvcConfiguration
@@ -194,6 +194,8 @@ fun PsiReference.injectAsBeanParameter(field: PsiField) {
 
 fun PsiField.canBeInjectedAsBeanParameter(): Boolean {
     hasAnnotation(AUTOWIRED) || hasAnnotation(VALUE) || return false
+
+    // TODO: Maybe treat injected field with no usage differently
 
     return references().all { it.isReferenceToFieldInsideBeanMethod() }
 }
