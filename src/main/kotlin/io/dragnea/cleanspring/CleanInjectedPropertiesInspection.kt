@@ -216,6 +216,7 @@ fun PsiReference.injectAsBeanParameter(field: PsiField) {
     field.getAnnotation(VALUE)?.let { modifierList.add(it) }
 }
 
+// TODO: Filter out usages inside bean methods used for injection by call
 fun PsiField.canBeInjectedAsBeanParameter() =
     references().all { it.isReferenceToFieldInsideBeanMethod() }
 
@@ -426,7 +427,7 @@ private fun PsiField.isPropertyInjectableThroughConstructor(): Boolean {
     hasFieldWithSameNameInAnySubclass() && return false
 
     when (containingClass.constructors.size) {
-        0 -> containingClass.noUsageIsFromCalledBeanMethods() || return false
+        0 -> containingClass.hasUsageFromCalledBeanMethods() && return false
         1 -> {
             val constructor = containingClass.constructors[0]
 
@@ -435,7 +436,7 @@ private fun PsiField.isPropertyInjectableThroughConstructor(): Boolean {
                 parameters.last().isVarArgs && return false
             }
 
-            constructor.noUsageIsFromCalledBeanMethods() || return false
+            constructor.hasUsageFromCalledBeanMethods() && return false
         }
         else -> return false
     }
@@ -525,9 +526,9 @@ private fun PsiMethod.allUsagesAreRightAfterConstructorCall(): Boolean = this
     .references()
     .all { it.isSetterCallRightAfterConstructorCall() }
 
-private fun PsiElement.noUsageIsFromCalledBeanMethods(): Boolean = this
+private fun PsiElement.hasUsageFromCalledBeanMethods(): Boolean = this
     .references()
-    .none { it.isNewExpressionInsideCalledBeanMethod() }
+    .any { it.isNewExpressionInsideCalledBeanMethod() }
 
 private fun PsiReference.isNewExpressionInsideCalledBeanMethod(): Boolean {
     val reference = castSafelyTo<PsiJavaCodeReferenceElement>() ?: return false
