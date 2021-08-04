@@ -16,7 +16,6 @@ intellij {
         "Spring",
         "org.jetbrains.kotlin:211-1.5.10-release-891-IJ7142.45"
     )
-
     updateSinceUntilBuild = false
 }
 
