@@ -120,7 +120,7 @@ jobs:
         id: properties
         shell: bash
         run: |
-          ./gradlew properties --console=plain -q
+          ./gradlew -d -S properties --console=plain -q
           PROPERTIES="$(./gradlew properties --console=plain -q)"
           VERSION="$(echo "$PROPERTIES" | grep "^version:" | cut -f2- -d ' ')"
           NAME="$(echo "$PROPERTIES" | grep "^pluginName:" | cut -f2- -d ' ')"
