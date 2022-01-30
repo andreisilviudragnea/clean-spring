@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
 plugins {
     kotlin("jvm") version "1.6.10"
     id("org.jetbrains.intellij") version "1.3.1"
@@ -26,13 +28,7 @@ java {
 }
 
 tasks {
-    compileKotlin {
-        kotlinOptions {
-            jvmTarget = "11"
-            allWarningsAsErrors = true
-        }
-    }
-    compileTestKotlin {
+    withType<KotlinCompile> {
         kotlinOptions {
             jvmTarget = "11"
             allWarningsAsErrors = true
