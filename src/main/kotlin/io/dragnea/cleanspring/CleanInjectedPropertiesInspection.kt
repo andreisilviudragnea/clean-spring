@@ -140,9 +140,7 @@ class CleanInjectedPropertiesInspection : AbstractBaseJavaLocalInspectionTool() 
                     field.containingClass!!.getOrCreateConstructor()
                         .processConstructorUsagesForField {
                             body?.add(
-                                factory.createStatementFromText(
-                                    "this.${field.name} = ${field.name};", body
-                                )
+                                factory.createStatementFromText("this.${field.name} = ${field.name};", body)
                             )
                         }
                 }
@@ -258,12 +256,14 @@ private data class PropertyInjectionContext(
                         .getOrCreateConstructor()
                         .propagateParameterToSuperCallAndConstructorUsages()
                 }
+
                 is PsiMethod -> {
                     element
                         .containingClass!!
                         .getOrCreateConstructor()
                         .propagateParameterToSuperCallAndConstructorUsages()
                 }
+
                 else -> {
                     when (val parent = reference.parent) {
                         is PsiNewExpression -> parent.newExpressionProcessor()
@@ -438,6 +438,7 @@ private fun PsiField.isPropertyInjectableThroughConstructor(): Boolean {
 
             constructor.hasUsageFromCalledBeanMethods() && return false
         }
+
         else -> return false
     }
 
@@ -631,11 +632,13 @@ private fun PsiNewExpression.getPsiVariable(): PsiVariable? {
             if (parent.initializer != this) return null
             parent
         }
+
         is PsiAssignmentExpression -> {
             val psiReferenceExpression =
                 parent.lExpression.castSafelyTo<PsiReferenceExpression>() ?: return null
             psiReferenceExpression.resolve().cast()
         }
+
         else -> null
     }
 }
