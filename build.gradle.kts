@@ -3,7 +3,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 plugins {
     kotlin("jvm") version "1.9.22"
     id("org.jetbrains.intellij") version "1.17.1"
-    id("org.jlleitschuh.gradle.ktlint") version "11.6.1"
+    id("org.jlleitschuh.gradle.ktlint") version "12.1.0"
 }
 
 group = "io.dragnea"
@@ -16,8 +16,8 @@ intellij {
         listOf(
             "java",
             "Spring",
-            "org.jetbrains.kotlin:213-1.6.10-release-923-IJ5744.223"
-        )
+            "org.jetbrains.kotlin:213-1.6.10-release-923-IJ5744.223",
+        ),
     )
 
     updateSinceUntilBuild.set(false)

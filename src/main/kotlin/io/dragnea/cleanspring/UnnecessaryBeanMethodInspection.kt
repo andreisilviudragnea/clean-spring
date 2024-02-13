@@ -34,7 +34,10 @@ const val BEAN_ANNOTATION = "org.springframework.context.annotation.Bean"
 const val IMPORT_ANNOTATION = "org.springframework.context.annotation.Import"
 
 class UnnecessaryBeanMethodInspection : AbstractBaseJavaLocalInspectionTool() {
-    override fun buildVisitor(holder: ProblemsHolder, isOnTheFly: Boolean): PsiElementVisitor {
+    override fun buildVisitor(
+        holder: ProblemsHolder,
+        isOnTheFly: Boolean,
+    ): PsiElementVisitor {
         return object : JavaElementVisitor() {
             override fun visitMethod(method: PsiMethod) {
                 if (method.isSimpleBeanMethod()) {
@@ -42,7 +45,7 @@ class UnnecessaryBeanMethodInspection : AbstractBaseJavaLocalInspectionTool() {
                         method.nameIdentifier!!,
                         "@Bean method can be replaced with @Import",
                         ProblemHighlightType.WARNING,
-                        Fix()
+                        Fix(),
                     )
                 }
             }
@@ -52,7 +55,10 @@ class UnnecessaryBeanMethodInspection : AbstractBaseJavaLocalInspectionTool() {
     class Fix : LocalQuickFix {
         override fun getFamilyName() = "Replace @Bean method with @Import"
 
-        override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
+        override fun applyFix(
+            project: Project,
+            descriptor: ProblemDescriptor,
+        ) {
             val beanMethod = descriptor.psiElement.parentOfType<PsiMethod>()!!
 
             val configurationClass = beanMethod.containingClass ?: return
@@ -107,7 +113,7 @@ private fun PsiClass.importClass(classToImport: PsiClass) {
                 "value",
                 elementFactory
                     .createExpressionFromText("${classToImport.getImportReferenceName()}.class", this)
-                    .cast<PsiClassObjectAccessExpression>()
+                    .cast<PsiClassObjectAccessExpression>(),
             )
         }
         is PsiArrayInitializerMemberValue -> {
@@ -115,15 +121,16 @@ private fun PsiClass.importClass(classToImport: PsiClass) {
 
             arrayInitializerMemberValue.addBefore(
                 elementFactory.createExpressionFromText("${classToImport.getImportReferenceName()}.class", this),
-                arrayInitializerMemberValue.lastChild
+                arrayInitializerMemberValue.lastChild,
             )
         }
         is PsiClassObjectAccessExpression -> {
             importAnnotation.replace(
                 elementFactory.createAnnotationFromText(
-                    "@${importAnnotation.nameReferenceElement!!.text}({${valueAttribute.text}, ${classToImport.getImportReferenceName()}.class})",
-                    this
-                )
+                    "@${importAnnotation.nameReferenceElement!!.text}({${valueAttribute.text}, " +
+                        "${classToImport.getImportReferenceName()}.class})",
+                    this,
+                ),
             )
         }
         else -> throw IllegalStateException("Impossible")
