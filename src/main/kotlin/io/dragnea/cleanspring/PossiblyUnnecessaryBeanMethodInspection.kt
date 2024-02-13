@@ -10,7 +10,10 @@ import com.intellij.psi.PsiMethodCallExpression
 import com.intellij.psi.search.searches.ReferencesSearch
 
 class PossiblyUnnecessaryBeanMethodInspection : AbstractBaseJavaLocalInspectionTool() {
-    override fun buildVisitor(holder: ProblemsHolder, isOnTheFly: Boolean): PsiElementVisitor {
+    override fun buildVisitor(
+        holder: ProblemsHolder,
+        isOnTheFly: Boolean,
+    ): PsiElementVisitor {
         return object : JavaElementVisitor() {
             override fun visitMethod(method: PsiMethod) {
                 if (method.isBeanMethodWithOneExplicitUsage()) {
@@ -18,7 +21,7 @@ class PossiblyUnnecessaryBeanMethodInspection : AbstractBaseJavaLocalInspectionT
                         method.nameIdentifier!!,
                         "@Bean method can be made regular or inlined",
                         ProblemHighlightType.WARNING,
-                        UnnecessaryBeanMethodInspection.Fix()
+                        UnnecessaryBeanMethodInspection.Fix(),
                     )
                 }
             }
@@ -31,9 +34,10 @@ private fun PsiMethod.checkAnnotations(): Boolean {
 }
 
 private fun PsiMethod.checkUsages(): Boolean {
-    val all = ReferencesSearch
-        .search(this)
-        .findAll()
+    val all =
+        ReferencesSearch
+            .search(this)
+            .findAll()
 
     all.size == 1 || return false
 

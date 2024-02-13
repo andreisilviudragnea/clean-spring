@@ -55,7 +55,10 @@ import org.jetbrains.kotlin.utils.addToStdlib.cast
 // InvalidateTokenV2IT
 // RevokeTokenIT
 class CleanInjectedPropertiesInspection : AbstractBaseJavaLocalInspectionTool() {
-    override fun buildVisitor(holder: ProblemsHolder, isOnTheFly: Boolean): PsiElementVisitor {
+    override fun buildVisitor(
+        holder: ProblemsHolder,
+        isOnTheFly: Boolean,
+    ): PsiElementVisitor {
         return object : JavaElementVisitor() {
             override fun visitField(field: PsiField) {
                 field.isInjected() || return
@@ -65,7 +68,7 @@ class CleanInjectedPropertiesInspection : AbstractBaseJavaLocalInspectionTool() 
                         field.nameIdentifier,
                         "Injected field is never used",
                         ProblemHighlightType.LIKE_UNUSED_SYMBOL,
-                        RemoveUnusedInjectedFieldFix()
+                        RemoveUnusedInjectedFieldFix(),
                     )
                     return
                 }
@@ -75,7 +78,7 @@ class CleanInjectedPropertiesInspection : AbstractBaseJavaLocalInspectionTool() 
                         field.nameIdentifier,
                         "Field can be injected as @Bean parameter",
                         ProblemHighlightType.WARNING,
-                        InjectFieldAsBeanParameterFix()
+                        InjectFieldAsBeanParameterFix(),
                     )
                     return
                 }
@@ -86,7 +89,7 @@ class CleanInjectedPropertiesInspection : AbstractBaseJavaLocalInspectionTool() 
                     field.nameIdentifier,
                     "Field property can be injected through constructor",
                     ProblemHighlightType.WARNING,
-                    FieldFix()
+                    FieldFix(),
                 )
             }
 
@@ -97,7 +100,7 @@ class CleanInjectedPropertiesInspection : AbstractBaseJavaLocalInspectionTool() 
                     method.nameIdentifier!!,
                     "Setter property can be injected through constructor",
                     ProblemHighlightType.WARNING,
-                    MethodFix()
+                    MethodFix(),
                 )
             }
         }
@@ -106,7 +109,10 @@ class CleanInjectedPropertiesInspection : AbstractBaseJavaLocalInspectionTool() 
     class RemoveUnusedInjectedFieldFix : LocalQuickFix {
         override fun getFamilyName() = "Remove unused injected field"
 
-        override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
+        override fun applyFix(
+            project: Project,
+            descriptor: ProblemDescriptor,
+        ) {
             val field = descriptor.psiElement.parent.cast<PsiField>()
             val file = field.containingFile
             field.delete()
@@ -117,7 +123,10 @@ class CleanInjectedPropertiesInspection : AbstractBaseJavaLocalInspectionTool() 
     class InjectFieldAsBeanParameterFix : LocalQuickFix {
         override fun getFamilyName() = "Inject field as @Bean parameter"
 
-        override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
+        override fun applyFix(
+            project: Project,
+            descriptor: ProblemDescriptor,
+        ) {
             val field = descriptor.psiElement.parent.cast<PsiField>()
             field.references().forEach { it.injectAsBeanParameter(field) }
             field.delete()
@@ -127,7 +136,10 @@ class CleanInjectedPropertiesInspection : AbstractBaseJavaLocalInspectionTool() 
     class FieldFix : LocalQuickFix {
         override fun getFamilyName() = "Inject field property through constructor"
 
-        override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
+        override fun applyFix(
+            project: Project,
+            descriptor: ProblemDescriptor,
+        ) {
             val field = descriptor.psiElement.parentOfType<PsiField>()!!
 
             runWriteAction {
@@ -140,7 +152,7 @@ class CleanInjectedPropertiesInspection : AbstractBaseJavaLocalInspectionTool() 
                     field.containingClass!!.getOrCreateConstructor()
                         .processConstructorUsagesForField {
                             body?.add(
-                                factory.createStatementFromText("this.${field.name} = ${field.name};", body)
+                                factory.createStatementFromText("this.${field.name} = ${field.name};", body),
                             )
                         }
                 }
@@ -160,7 +172,10 @@ class CleanInjectedPropertiesInspection : AbstractBaseJavaLocalInspectionTool() 
     class MethodFix : LocalQuickFix {
         override fun getFamilyName() = "Inject setter property through constructor"
 
-        override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
+        override fun applyFix(
+            project: Project,
+            descriptor: ProblemDescriptor,
+        ) {
             val setterMethod = descriptor.psiElement.parentOfType<PsiMethod>()!!
 
             val setterParameter = setterMethod.setterParameter()!!
@@ -204,9 +219,10 @@ fun PsiReference.injectAsBeanParameter(field: PsiField) {
         return
     }
 
-    val parameter = beanMethod.parameterList.add(
-        beanMethod.factory.createParameter(fieldName, field.type)
-    ).cast<PsiParameter>()
+    val parameter =
+        beanMethod.parameterList.add(
+            beanMethod.factory.createParameter(fieldName, field.type),
+        ).cast<PsiParameter>()
 
     val modifierList = parameter.modifierList!!
 
@@ -215,8 +231,7 @@ fun PsiReference.injectAsBeanParameter(field: PsiField) {
 }
 
 // TODO: Filter out usages inside bean methods used for injection by call
-fun PsiField.canBeInjectedAsBeanParameter() =
-    references().all { it.isReferenceToFieldInsideBeanMethod() }
+fun PsiField.canBeInjectedAsBeanParameter() = references().all { it.isReferenceToFieldInsideBeanMethod() }
 
 private fun PsiField.isInjected() = hasAnnotation(AUTOWIRED) || hasAnnotation(VALUE)
 
@@ -229,7 +244,7 @@ fun PsiReference.isReferenceToFieldInsideBeanMethod(): Boolean {
 }
 
 private data class PropertyInjectionContext(
-    val property: PsiVariable
+    val property: PsiVariable,
 ) {
     fun PsiMethod.processConstructorUsagesForSetter(bodyTransformer: PsiMethod.() -> Unit) =
         processConstructorUsages(bodyTransformer) { processConstructorCall() }
@@ -239,7 +254,7 @@ private data class PropertyInjectionContext(
 
     private fun PsiMethod.processConstructorUsages(
         bodyTransformer: PsiMethod.() -> Unit,
-        newExpressionProcessor: PsiNewExpression.() -> Unit
+        newExpressionProcessor: PsiNewExpression.() -> Unit,
     ) {
         val query = this.references().findAll()
 
@@ -283,7 +298,7 @@ private data class PropertyInjectionContext(
     private fun PsiMethod.propagateParameterToSuperCallAndConstructorUsages() =
         processConstructorUsagesForSetter {
             getSuperCall().argumentList.add(
-                property.factory.createExpressionFromText(property.name!!, this)
+                property.factory.createExpressionFromText(property.name!!, this),
             )
         }
 
@@ -311,8 +326,8 @@ private data class PropertyInjectionContext(
         setterStatement.replace(
             factory.createStatementFromText(
                 constructorStatement.text,
-                constructorStatement.parentOfType<PsiBlockStatement>()
-            )
+                constructorStatement.parentOfType<PsiBlockStatement>(),
+            ),
         )
 
         constructorStatement.delete()
@@ -326,8 +341,8 @@ private data class PropertyInjectionContext(
             argumentList.add(
                 factory.createExpressionFromText(
                     property.type.defaultValue,
-                    this
-                )
+                    this,
+                ),
             )
             return
         }
@@ -340,9 +355,10 @@ private data class PropertyInjectionContext(
     }
 
     private fun PsiVariable.getSetterArgument(): PsiExpression? {
-        val setterArguments = this
-            .references()
-            .mapNotNull { it.getSetterArgumentExpression() }
+        val setterArguments =
+            this
+                .references()
+                .mapNotNull { it.getSetterArgumentExpression() }
 
         if (setterArguments.size != 1) return null
 
@@ -372,9 +388,10 @@ private data class PropertyInjectionContext(
             it.addParameter()
         }
 
-        val parameter = parameterList
-            .add(factory.createParameter(property.name!!, property.type))
-            .cast<PsiParameter>()
+        val parameter =
+            parameterList
+                .add(factory.createParameter(property.name!!, property.type))
+                .cast<PsiParameter>()
 
         val modifierList = parameter.modifierList!!
 
@@ -445,9 +462,10 @@ private fun PsiField.isPropertyInjectableThroughConstructor(): Boolean {
     return true
 }
 
-private fun PsiClass.isServletClassReferencedInWebXml(): Boolean = this
-    .references()
-    .any { it.isServletClassTag() }
+private fun PsiClass.isServletClassReferencedInWebXml(): Boolean =
+    this
+        .references()
+        .any { it.isServletClassTag() }
 
 private fun PsiReference.isServletClassTag(): Boolean {
     val element = element
@@ -475,9 +493,10 @@ private fun PsiReference.isEntityListener(): Boolean {
         .firstOrNull { it.value == classObjectAccessExpression } != null
 }
 
-private fun PsiField.hasFieldWithSameNameInAnySubclass(): Boolean = containingClass!!
-    .references()
-    .any { hasFieldWithSameNameInSubclass(it) }
+private fun PsiField.hasFieldWithSameNameInAnySubclass(): Boolean =
+    containingClass!!
+        .references()
+        .any { hasFieldWithSameNameInSubclass(it) }
 
 private fun PsiField.hasFieldWithSameNameInSubclass(reference: PsiReference): Boolean {
     val subclass = reference.getSubclass() ?: return false
@@ -523,13 +542,15 @@ private fun PsiClass.extends(qualifiedName: String): Boolean {
     }
 }
 
-private fun PsiMethod.allUsagesAreRightAfterConstructorCall(): Boolean = this
-    .references()
-    .all { it.isSetterCallRightAfterConstructorCall() }
+private fun PsiMethod.allUsagesAreRightAfterConstructorCall(): Boolean =
+    this
+        .references()
+        .all { it.isSetterCallRightAfterConstructorCall() }
 
-private fun PsiElement.hasUsageFromCalledBeanMethods(): Boolean = this
-    .references()
-    .any { it.isNewExpressionInsideCalledBeanMethod() }
+private fun PsiElement.hasUsageFromCalledBeanMethods(): Boolean =
+    this
+        .references()
+        .any { it.isNewExpressionInsideCalledBeanMethod() }
 
 private fun PsiReference.isNewExpressionInsideCalledBeanMethod(): Boolean {
     val reference = castSafelyTo<PsiJavaCodeReferenceElement>() ?: return false
@@ -601,10 +622,11 @@ fun PsiReference.isSetterCallRightAfterConstructorCall(): Boolean {
 
         val soleAssignmentStatement = soleAssignment.parentOfType<PsiStatement>()
 
-        val statements = psiVariable
-            .references()
-            .mapNotNull { it.element.parentOfType<PsiStatement>() }
-            .filter { it != soleAssignmentStatement }
+        val statements =
+            psiVariable
+                .references()
+                .mapNotNull { it.element.parentOfType<PsiStatement>() }
+                .filter { it != soleAssignmentStatement }
 
         val setterStatement =
             referenceExpression.parentOfType<PsiStatement>() ?: return false
@@ -683,25 +705,28 @@ private fun PsiStatement.asSuperCall(): PsiMethodCallExpression? {
     return expression
 }
 
-private fun PsiClass.getOrCreateConstructor(): PsiMethod = if (constructors.isEmpty()) {
-    addDefaultConstructor()
-} else {
-    constructors[0]
-}
+private fun PsiClass.getOrCreateConstructor(): PsiMethod =
+    if (constructors.isEmpty()) {
+        addDefaultConstructor()
+    } else {
+        constructors[0]
+    }
 
 private fun PsiClass.addDefaultConstructor(): PsiMethod {
-    val defaultConstructor = factory.createMethodFromText(
-        "public $name() {}",
-        this
-    )
+    val defaultConstructor =
+        factory.createMethodFromText(
+            "public $name() {}",
+            this,
+        )
 
     val firstOrNull = methods.firstOrNull()
 
-    val psiElement = if (firstOrNull == null) {
-        add(defaultConstructor)
-    } else {
-        addBefore(defaultConstructor, firstOrNull)
-    }
+    val psiElement =
+        if (firstOrNull == null) {
+            add(defaultConstructor)
+        } else {
+            addBefore(defaultConstructor, firstOrNull)
+        }
 
     return psiElement.cast()
 }
@@ -737,15 +762,16 @@ private fun PsiMethod.setterParameter(): PsiParameter? {
     return parameters[0]
 }
 
-private fun PsiMethod.getField() = body!!
-    .statements[0]
-    .cast<PsiExpressionStatement>()
-    .expression
-    .cast<PsiAssignmentExpression>()
-    .lExpression
-    .cast<PsiReferenceExpression>()
-    .resolve()
-    .cast<PsiField>()
+private fun PsiMethod.getField() =
+    body!!
+        .statements[0]
+        .cast<PsiExpressionStatement>()
+        .expression
+        .cast<PsiAssignmentExpression>()
+        .lExpression
+        .cast<PsiReferenceExpression>()
+        .resolve()
+        .cast<PsiField>()
 
 private fun PsiField.getSoleAssignment(): PsiAssignmentExpression? {
     val assignments = assignmentExpressions()
@@ -755,9 +781,10 @@ private fun PsiField.getSoleAssignment(): PsiAssignmentExpression? {
     return assignments[0]
 }
 
-private fun PsiField.assignmentExpressions() = this
-    .references()
-    .mapNotNull { it.asAssignmentExpression() }
+private fun PsiField.assignmentExpressions() =
+    this
+        .references()
+        .mapNotNull { it.asAssignmentExpression() }
 
 private fun PsiReference.asAssignmentExpression(): PsiAssignmentExpression? {
     if (this !is PsiReferenceExpression) return null
@@ -774,14 +801,15 @@ private fun PsiReference.asAssignmentExpression(): PsiAssignmentExpression? {
 private fun PsiMethod.returnsVoid() = returnType == PsiType.VOID
 
 private val PsiType.defaultValue
-    get() = when {
-        this == PsiType.BYTE -> "0"
-        this == PsiType.CHAR -> "0"
-        this == PsiType.DOUBLE -> "0"
-        this == PsiType.FLOAT -> "0"
-        this == PsiType.INT -> "0"
-        this == PsiType.LONG -> "0"
-        this == PsiType.SHORT -> "0"
-        this == PsiType.BOOLEAN -> "false"
-        else -> "null"
-    }
+    get() =
+        when {
+            this == PsiType.BYTE -> "0"
+            this == PsiType.CHAR -> "0"
+            this == PsiType.DOUBLE -> "0"
+            this == PsiType.FLOAT -> "0"
+            this == PsiType.INT -> "0"
+            this == PsiType.LONG -> "0"
+            this == PsiType.SHORT -> "0"
+            this == PsiType.BOOLEAN -> "false"
+            else -> "null"
+        }
